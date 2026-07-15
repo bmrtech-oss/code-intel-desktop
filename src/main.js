@@ -36,6 +36,7 @@ console.log('main.js loaded');
       this.mcpConnected = false;
       this.graphData = null;
       this.mcpTools = [];
+      this.demoMode = false;
     }
 
     async connect() {
@@ -55,6 +56,10 @@ console.log('main.js loaded');
     }
 
     async getGraph() {
+      if (this.demoMode) {
+        this.graphData = this.getDemoGraphData();
+        return this.graphData;
+      }
       if (this.graphData) return this.graphData;
       try {
         const resp = await fetch(`${this.baseUrl}/api/graph`);
@@ -154,6 +159,61 @@ console.log('main.js loaded');
       }
     }
 
+    getDemoGraphData() {
+      return {
+        nodes: [
+          { id: 'n1', label: 'AuthService', type: 'class' },
+          { id: 'n2', label: 'login', type: 'function' },
+          { id: 'n3', label: 'validateUser', type: 'function' },
+          { id: 'n4', label: 'hashPassword', type: 'function' },
+          { id: 'n5', label: 'UserRepository', type: 'class' },
+          { id: 'n6', label: 'findByEmail', type: 'function' },
+          { id: 'n7', label: 'DatabaseConnection', type: 'class' },
+          { id: 'n8', label: 'query', type: 'function' },
+          { id: 'n9', label: 'Logger', type: 'class' },
+          { id: 'n10', label: 'log', type: 'function' },
+          { id: 'n11', label: 'ConfigService', type: 'class' },
+          { id: 'n12', label: 'getSecret', type: 'function' },
+          { id: 'n13', label: 'TokenService', type: 'class' },
+          { id: 'n14', label: 'generateToken', type: 'function' },
+          { id: 'n15', label: 'verifyToken', type: 'function' },
+          { id: 'n16', label: 'EmailService', type: 'class' },
+          { id: 'n17', label: 'sendWelcome', type: 'function' },
+          { id: 'n18', label: 'User', type: 'class' },
+          { id: 'n19', label: 'Role', type: 'enum' },
+          { id: 'n20', label: 'main', type: 'function' },
+        ],
+        edges: [
+          { source: 'n2', target: 'n3', type: 'calls' },
+          { source: 'n2', target: 'n4', type: 'calls' },
+          { source: 'n2', target: 'n5', type: 'calls' },
+          { source: 'n3', target: 'n6', type: 'calls' },
+          { source: 'n3', target: 'n18', type: 'calls' },
+          { source: 'n6', target: 'n7', type: 'calls' },
+          { source: 'n6', target: 'n8', type: 'calls' },
+          { source: 'n5', target: 'n7', type: 'calls' },
+          { source: 'n1', target: 'n9', type: 'calls' },
+          { source: 'n1', target: 'n11', type: 'calls' },
+          { source: 'n1', target: 'n13', type: 'calls' },
+          { source: 'n14', target: 'n12', type: 'calls' },
+          { source: 'n14', target: 'n10', type: 'calls' },
+          { source: 'n15', target: 'n12', type: 'calls' },
+          { source: 'n16', target: 'n17', type: 'calls' },
+          { source: 'n17', target: 'n10', type: 'calls' },
+          { source: 'n20', target: 'n1', type: 'calls' },
+          { source: 'n20', target: 'n16', type: 'calls' },
+          { source: 'n20', target: 'n14', type: 'calls' },
+          { source: 'n2', target: 'n1', type: 'imports' },
+          { source: 'n3', target: 'n5', type: 'imports' },
+          { source: 'n6', target: 'n7', type: 'imports' },
+          { source: 'n14', target: 'n11', type: 'imports' },
+          { source: 'n17', target: 'n9', type: 'imports' },
+          { source: 'n5', target: 'n18', type: 'imports' },
+          { source: 'n1', target: 'n18', type: 'imports' },
+        ]
+      };
+    }
+
     // === MCP Discovery ===
     async getMCPInfo() {
       if (!this.canFetchUrl(this.mcpUrl)) {
@@ -189,6 +249,62 @@ console.log('main.js loaded');
   let nodeMap = {};
   let cy = null;
   let selectedNodeIds = [];
+  let currentRepoTree = null;
+  let currentRepoSource = 'Demo project';
+
+  function updateRepoSourceInfo() {
+    const sourceInfo = document.getElementById('repoSourceInfo');
+    if (!sourceInfo) return;
+    if (service.demoMode) {
+      sourceInfo.textContent = 'Source: Demo project';
+    } else if (currentRepoTree) {
+      sourceInfo.textContent = 'Source: Local repository';
+    } else {
+      sourceInfo.textContent = `Source: ${service.baseUrl}`;
+    }
+  }
+
+  function createRepoTreeFromFiles(files) {
+    const tree = {};
+    Array.from(files).sort((a, b) => {
+      const aPath = a.webkitRelativePath || a.name;
+      const bPath = b.webkitRelativePath || b.name;
+      return aPath.localeCompare(bPath);
+    }).forEach(file => {
+      const path = file.webkitRelativePath || file.name;
+      const segments = path.split('/').filter(Boolean);
+      let node = tree;
+      segments.forEach((segment, index) => {
+        const isFile = index === segments.length - 1;
+        if (isFile) {
+          node[segment] = { type: 'file', path };
+        } else {
+          node[segment] = node[segment] || { type: 'folder', children: {} };
+          node = node[segment].children;
+        }
+      });
+    });
+    return tree;
+  }
+
+  function selectRepoFiles(files) {
+    currentRepoTree = createRepoTreeFromFiles(files);
+    currentRepoSource = 'Local repository';
+    service.demoMode = false;
+    service.graphData = null;
+    updateRepoSourceInfo();
+    buildFileTree();
+    loadGraph();
+  }
+
+  function selectDemoProject() {
+    currentRepoTree = null;
+    currentRepoSource = 'Demo project';
+    service.demoMode = true;
+    service.graphData = null;
+    updateRepoSourceInfo();
+    loadGraph();
+  }
 
   // === Details Panel Functions ===
   function showNodeDetails(node) {
@@ -380,32 +496,56 @@ console.log('main.js loaded');
   function buildFileTree() {
     console.log('buildFileTree: nodeMap size=', Object.keys(nodeMap || {}).length);
     const container = document.getElementById('fileTree');
-    if (!container || !service.graphData) return;
-    const folderMap = { 'auth': ['n1', 'n13'], 'user': ['n5', 'n18'], 'utils': ['n9', 'n11'], 'db': ['n7'], 'email': ['n16'], 'root': ['n20'] };
-    let treeHtml = `<div class="file-tree__item file-tree__item--folder" style="padding-left:8px;"><span class="file-tree__toggle file-tree__toggle--expanded" data-folder-name="src">▶</span><span class="file-tree__icon">📂</span><span>src</span></div>`;
-    treeHtml += `<div class="file-tree__children" data-folder-children="src">`;
-    Object.keys(folderMap).forEach(folder => {
-      if (folder === 'root') return;
-      treeHtml += `<div class="file-tree__item file-tree__item--folder" style="padding-left:24px;"><span class="file-tree__toggle" data-folder-name="${folder}">▶</span><span class="file-tree__icon">📁</span><span>${folder}/</span></div>`;
-      treeHtml += `<div class="file-tree__children file-tree__children--collapsed" data-folder-children="${folder}">`;
-      folderMap[folder].forEach(id => {
-        const node = nodeMap[id];
-        if (node) {
-          treeHtml += `<div class="file-tree__item file-tree__item--file" style="padding-left:40px;" data-node-id="${node.id}"><span class="file-tree__toggle" style="visibility:hidden;">▶</span><span class="file-tree__icon">📄</span><span>${node.label}.ts</span></div>`;
+    if (!container) return;
+
+    const renderTree = (tree, depth = 0) => {
+      let html = '';
+      Object.keys(tree).sort().forEach((key) => {
+        const item = tree[key];
+        const indent = 8 + depth * 16;
+        if (item.type === 'folder') {
+          const folderId = `repo-folder-${depth}-${key}`.replace(/\W/g, '_');
+          html += `<div class="file-tree__item file-tree__item--folder" style="padding-left:${indent}px;"><span class="file-tree__toggle" data-folder-name="${folderId}">▶</span><span class="file-tree__icon">📁</span><span>${key}/</span></div>`;
+          html += `<div class="file-tree__children file-tree__children--collapsed" data-folder-children="${folderId}">`;
+          html += renderTree(item.children, depth + 1);
+          html += `</div>`;
+        } else {
+          html += `<div class="file-tree__item file-tree__item--file" style="padding-left:${indent}px;" data-path="${item.path}"><span class="file-tree__toggle" style="visibility:hidden;">▶</span><span class="file-tree__icon">📄</span><span>${key}</span></div>`;
         }
       });
-      treeHtml += `</div>`;
-    });
-    if (folderMap['root']) {
-      folderMap['root'].forEach(id => {
-        const node = nodeMap[id];
-        if (node) {
-          treeHtml += `<div class="file-tree__item file-tree__item--file" style="padding-left:24px;" data-node-id="${node.id}"><span class="file-tree__toggle" style="visibility:hidden;">▶</span><span class="file-tree__icon">📄</span><span>${node.label}.ts</span></div>`;
-        }
+      return html;
+    };
+
+    if (currentRepoTree) {
+      container.innerHTML = renderTree(currentRepoTree, 0);
+    } else {
+      const folderMap = { 'auth': ['n1', 'n13'], 'user': ['n5', 'n18'], 'utils': ['n9', 'n11'], 'db': ['n7'], 'email': ['n16'], 'root': ['n20'] };
+      let html = '';
+      html += `<div class="file-tree__item file-tree__item--folder" style="padding-left:8px;"><span class="file-tree__toggle file-tree__toggle--expanded" data-folder-name="src">▶</span><span class="file-tree__icon">📂</span><span>src</span></div>`;
+      html += `<div class="file-tree__children" data-folder-children="src">`;
+      Object.keys(folderMap).forEach(folder => {
+        if (folder === 'root') return;
+        html += `<div class="file-tree__item file-tree__item--folder" style="padding-left:24px;"><span class="file-tree__toggle" data-folder-name="${folder}">▶</span><span class="file-tree__icon">📁</span><span>${folder}/</span></div>`;
+        html += `<div class="file-tree__children file-tree__children--collapsed" data-folder-children="${folder}">`;
+        folderMap[folder].forEach(id => {
+          const node = nodeMap[id];
+          if (node) {
+            html += `<div class="file-tree__item file-tree__item--file" style="padding-left:40px;" data-node-id="${node.id}"><span class="file-tree__toggle" style="visibility:hidden;">▶</span><span class="file-tree__icon">📄</span><span>${node.label}.ts</span></div>`;
+          }
+        });
+        html += `</div>`;
       });
+      if (folderMap['root']) {
+        folderMap['root'].forEach(id => {
+          const node = nodeMap[id];
+          if (node) {
+            html += `<div class="file-tree__item file-tree__item--file" style="padding-left:24px;" data-node-id="${node.id}"><span class="file-tree__toggle" style="visibility:hidden;">▶</span><span class="file-tree__icon">📄</span><span>${node.label}.ts</span></div>`;
+          }
+        });
+      }
+      html += `</div>`;
+      container.innerHTML = html;
     }
-    treeHtml += `</div>`;
-    container.innerHTML = treeHtml;
 
     container.querySelectorAll('.file-tree__toggle').forEach(toggle => {
       toggle.addEventListener('click', (e) => {
@@ -424,9 +564,11 @@ console.log('main.js loaded');
         }
       });
     });
+
     container.querySelectorAll('.file-tree__item--file').forEach(item => {
       item.addEventListener('click', () => {
         const nodeId = item.dataset.nodeId;
+        const path = item.dataset.path;
         if (nodeId && cy) {
           const el = cy.getElementById(nodeId);
           if (el && el.length) {
@@ -434,7 +576,11 @@ console.log('main.js loaded');
             el.select();
             showNodeDetails(el);
             cy.animate({ center: { eles: el }, zoom: 2.5, duration: 400 });
+            return;
           }
+        }
+        if (path) {
+          alert('Selected file: ' + path);
         }
       });
     });
@@ -744,6 +890,7 @@ console.log('main.js loaded');
 
     buildFileTree();
     showEmptyDetails();
+    updateRepoSourceInfo();
     console.log('✅ Graph loaded with', graph.nodes.length, 'nodes and', graph.edges.length, 'edges.');
   }
 
@@ -985,10 +1132,23 @@ console.log('main.js loaded');
     setupGraphControls();
     setupSettingsModal();
     setupWorkspace();
+    document.getElementById('browseRepoBtn').addEventListener('click', () => {
+      document.getElementById('repoFileInput').click();
+    });
+    document.getElementById('demoProjectBtn').addEventListener('click', () => {
+      selectDemoProject();
+    });
+    document.getElementById('repoFileInput').addEventListener('change', (event) => {
+      const files = event.target.files;
+      if (files && files.length > 0) {
+        selectRepoFiles(files);
+      }
+    });
     loadGraph();
     refreshMCPTools(); // Also refresh MCP tools on load
     enableSplitter();
     enableRightSplitter();
+    updateRepoSourceInfo();
 
     // Periodic health check (every 30 seconds)
     setInterval(() => {

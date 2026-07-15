@@ -38,7 +38,13 @@
     <aside class="sidebar left-pane">
       <section class="sidebar-section">
         <div class="sidebar-section__title">File Tree</div>
+        <div class="sidebar-section__actions">
+          <button class="sidebar__action-button" id="browseRepoBtn">Browse repo</button>
+          <button class="sidebar__action-button" id="demoProjectBtn">Show demo project</button>
+        </div>
         <div class="file-tree" id="fileTree"></div>
+        <div class="sidebar__source-info" id="repoSourceInfo">Source: Demo project</div>
+        <input type="file" id="repoFileInput" webkitdirectory directory multiple style="display:none" />
       </section>
       <section class="sidebar-section">
         <div class="sidebar-section__title">Filters</div>

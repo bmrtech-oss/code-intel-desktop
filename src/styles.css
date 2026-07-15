@@ -140,6 +140,10 @@ body { font-family: var(--font-family); background: var(--theme-bg); color: var(
 .sidebar-section { border-bottom: 1px solid var(--theme-border); padding: var(--space-md) var(--space-lg); flex-shrink: 0; }
 .sidebar-section:last-child { border-bottom: none; flex: 1; overflow-y: auto; }
 .sidebar-section__title { color: var(--theme-text-secondary); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-bottom: var(--space-sm); }
+.sidebar-section__actions { display:flex; gap:var(--space-xs); flex-wrap: wrap; margin-bottom: var(--space-sm); }
+.sidebar__action-button { font-size: 11px; padding: 4px 8px; border-radius: var(--radius-md); border: 1px solid var(--theme-border); background: var(--theme-surface-elevated); color: var(--theme-text-primary); cursor: pointer; transition: all 150ms ease; }
+.sidebar__action-button:hover { border-color: var(--theme-primary); background: rgba(88,166,255,0.08); }
+.sidebar__source-info { font-size: 11px; color: var(--theme-text-secondary); margin-top: var(--space-sm); }
 
 /* File Tree */
 .file-tree {
