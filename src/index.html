@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Code-Intel Desktop</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
+</head>
+<body>
+
+  <!-- ===== TOP BAR ===== -->
+  <header class="topbar">
+    <div class="topbar__brand">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="16 18 22 12 16 6" />
+        <polyline points="8 6 2 12 8 18" />
+      </svg>
+      Code-Intel
+    </div>
+    <div class="topbar__spacer"></div>
+    <div class="topbar__group">
+      <div class="search-bar">
+        <span class="search-bar__icon">🔍</span>
+        <input class="search-bar__input" type="text" placeholder="Search symbols…" id="searchInput" />
+        <span class="search-bar__kbd">⌘K</span>
+      </div>
+      <button class="topbar__button" id="settingsBtn" title="Settings">⚙️</button>
+      <button class="theme-toggle" id="themeToggle">
+        <span class="theme-toggle__icon" id="themeIcon">☀️</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ===== MAIN AREA ===== -->
+  <div class="main-area">
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <section class="sidebar-section">
+        <div class="sidebar-section__title">File Tree</div>
+        <div class="file-tree" id="fileTree"></div>
+      </section>
+      <section class="sidebar-section">
+        <div class="sidebar-section__title">Filters</div>
+        <div class="filter-group" id="filterGroup">
+          <button class="filter-chip filter-chip--active" data-type="all">All</button>
+          <button class="filter-chip" data-type="function">
+            <span class="filter-chip__dot" style="background:var(--node-function);"></span>
+            Function
+          </button>
+          <button class="filter-chip" data-type="class">
+            <span class="filter-chip__dot" style="background:var(--node-class);"></span>
+            Class
+          </button>
+          <button class="filter-chip" data-type="module">
+            <span class="filter-chip__dot" style="background:var(--node-module);"></span>
+            Module
+          </button>
+          <button class="filter-chip" data-type="file">
+            <span class="filter-chip__dot" style="background:var(--node-file);"></span>
+            File
+          </button>
+          <button class="filter-chip" data-type="variable">
+            <span class="filter-chip__dot" style="background:var(--node-variable);"></span>
+            Variable
+          </button>
+          <button class="filter-chip" data-type="enum">
+            <span class="filter-chip__dot" style="background:var(--node-enum);"></span>
+            Enum
+          </button>
+        </div>
+      </section>
+      <section class="sidebar-section">
+        <div class="sidebar-section__title">MCP Tools</div>
+        <div id="mcpToolsList" style="font-size:12px; color:var(--theme-text-secondary);">
+          <span style="color:var(--theme-text-dim);">Loading MCP tools…</span>
+        </div>
+      </section>
+      <section class="sidebar-section">
+        <div class="sidebar-section__title">Legend</div>
+        <div class="legend" id="legend">
+          <div class="legend__row">
+            <span class="legend__swatch" style="background:var(--node-function);"></span>
+            <span class="legend__label">Function</span>
+          </div>
+          <div class="legend__row">
+            <span class="legend__swatch" style="background:var(--node-class);"></span>
+            <span class="legend__label">Class</span>
+          </div>
+          <div class="legend__row">
+            <span class="legend__swatch" style="background:var(--node-module);"></span>
+            <span class="legend__label">Module</span>
+          </div>
+          <div class="legend__row">
+            <span class="legend__swatch" style="background:var(--node-file);"></span>
+            <span class="legend__label">File</span>
+          </div>
+          <div class="legend__row">
+            <span class="legend__swatch" style="background:var(--node-variable);"></span>
+            <span class="legend__label">Variable</span>
+          </div>
+          <div class="legend__row">
+            <span class="legend__swatch" style="background:var(--node-enum);"></span>
+            <span class="legend__label">Enum</span>
+          </div>
+          <div class="legend__row" style="margin-top:var(--space-xs); padding-top:var(--space-xs); border-top:1px solid var(--theme-border);">
+            <span class="legend__swatch legend__swatch--edge" style="background:var(--edge-call);"></span>
+            <span class="legend__label">Call</span>
+          </div>
+          <div class="legend__row">
+            <span class="legend__swatch legend__swatch--edge" style="background:var(--edge-import);"></span>
+            <span class="legend__label">Import</span>
+          </div>
+        </div>
+      </section>
+    </aside>
+
+    <!-- GRAPH VIEWER -->
+    <main class="graph-viewer">
+      <div id="cy"></div>
+      <div class="graph-controls">
+        <button class="graph-controls__button" id="zoomInBtn" title="Zoom In">＋</button>
+        <button class="graph-controls__button" id="zoomOutBtn" title="Zoom Out">−</button>
+        <button class="graph-controls__button" id="fitBtn" title="Fit Graph">⊞</button>
+        <div class="graph-controls__divider"></div>
+        <button class="graph-controls__button" id="screenshotBtn" title="Screenshot">📷</button>
+      </div>
+    </main>
+
+    <!-- DETAILS PANEL -->
+    <aside class="details-panel">
+      <div class="details-panel__header">
+        <div class="details-panel__header-title">Node Details</div>
+        <div class="details-panel__node-name" id="detailName">—</div>
+        <div class="details-panel__node-type" id="detailType">Select a node</div>
+        <div class="details-panel__node-file" id="detailFile"></div>
+        <div class="details-panel__node-id" id="detailId"></div>
+      </div>
+      <div class="details-panel__body" id="detailsBody">
+        <div class="details-panel__empty" id="emptyState">
+          <div class="details-panel__empty-icon">🔍</div>
+          <div class="details-panel__empty-text">Click a node in the graph to view details</div>
+        </div>
+        <div id="detailsContent" style="display:none;">
+          <div class="details-panel__section">
+            <div class="details-panel__section-title">Impact Analysis</div>
+            <div id="impactList"><div class="details-panel__impact-item"><span class="mono">—</span></div></div>
+          </div>
+          <div class="details-panel__section">
+            <div class="details-panel__section-title">Call Paths</div>
+            <div id="callPaths" style="font-size:12px; color:var(--theme-text-secondary);"><span class="mono">No paths available</span></div>
+          </div>
+          <div class="details-panel__section">
+            <div class="details-panel__section-title">Actions</div>
+            <div class="details-panel__actions">
+              <button class="details-panel__action" id="actionOpen">Open in Editor</button>
+              <button class="details-panel__action" id="actionFind">Find References</button>
+              <button class="details-panel__action" id="actionCopy">Copy Name</button>
+              <button class="details-panel__action" id="actionGenerateReq">📄 Generate Requirements</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- ===== STATUS BAR ===== -->
+  <footer class="status-bar">
+    <div class="status-bar__item">
+      <span>📊</span>
+      <span id="nodeCount">Loading nodes…</span>
+      <span>·</span>
+      <span id="edgeCount">Loading edges…</span>
+    </div>
+    <div class="status-bar__item">
+      <span class="status-bar__dot" id="serverDot" style="background:var(--theme-warning);"></span>
+      <span id="serverStatus">Connecting…</span>
+    </div>
+    <div class="status-bar__item">
+      <span class="status-bar__dot" id="mcpDot" style="background:var(--theme-warning);"></span>
+      <span id="mcpStatus">MCP: Unknown</span>
+    </div>
+    <div class="status-bar__item status-bar__item--right">
+      <span class="status-bar__theme-indicator">
+        <span id="themeLabel">Dark</span>
+        <span id="themeEmoji">🌙</span>
+      </span>
+    </div>
+  </footer>
+
+  <!-- ===== SETTINGS MODAL ===== -->
+  <div class="modal-overlay" id="settingsModal">
+    <div class="modal">
+      <button class="modal__close" id="settingsModalClose" aria-label="Close settings">✕</button>
+      <div class="modal__title">⚙️ Settings</div>
+      <div class="modal__body">
+        <div class="modal__field">
+          <label for="settingsServerUrl">Server URL</label>
+          <input type="url" id="settingsServerUrl" placeholder="http://localhost:8080" value="http://localhost:8080" />
+        </div>
+        <div class="modal__field">
+          <label for="settingsMcpUrl">MCP Endpoint (Model Context Protocol)</label>
+          <input type="url" id="settingsMcpUrl" placeholder="mcp://localhost:8080" value="mcp://localhost:8080" />
+        </div>
+        <div class="modal__field">
+          <label for="settingsLLM">LLM Model</label>
+          <select id="settingsLLM">
+            <option value="gpt-4">GPT-4</option>
+            <option value="gpt-4-turbo">GPT-4 Turbo</option>
+            <option value="claude-3.5-sonnet">Claude 3.5 Sonnet</option>
+            <option value="claude-3-haiku">Claude 3 Haiku</option>
+            <option value="llama-3-70b">Llama 3 70B</option>
+            <option value="gemini-pro">Gemini Pro</option>
+            <option value="mistral-large">Mistral Large</option>
+          </select>
+        </div>
+        <div class="modal__field">
+          <label for="settingsApiKey">API Key</label>
+          <input type="password" id="settingsApiKey" placeholder="Enter your API key" />
+          <div class="modal__status" id="settingsKeyStatus">Key not saved</div>
+        </div>
+        <div class="modal__actions">
+          <button class="modal__button" id="settingsCancel">Cancel</button>
+          <button class="modal__button modal__button--primary" id="settingsSave">Save & Connect</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== REQUIREMENTS WORKSPACE MODAL ===== -->
+  <div class="modal-overlay" id="requirementsWorkspace">
+    <div class="workspace-modal">
+      <div class="workspace-header">
+        <div class="workspace-header__title"><span>📄</span> Requirements Workspace</div>
+        <div class="workspace-header__actions">
+          <button class="modal__button" id="workspaceClose" style="border:none; background:transparent; font-size:20px; padding:var(--space-xs) var(--space-sm);">✕</button>
+        </div>
+      </div>
+      <div class="workspace-body">
+        <div class="workspace-top">
+          <div class="workspace-panel">
+            <div class="workspace-panel__label">Scope (Selected Nodes) <span id="scopeCount">0 nodes</span></div>
+            <div class="workspace-panel__content" id="selectedNodesList">
+              <div style="color:var(--theme-text-dim); font-size:13px;">Select nodes in the graph using Shift+click or box selection.</div>
+            </div>
+            <div class="workspace-panel__label">Context / Prompt</div>
+            <textarea class="workspace-panel__textarea" id="reqPrompt" placeholder="Provide additional context for the LLM (e.g., target audience, architectural constraints)"></textarea>
+            <div style="display:flex; gap:var(--space-sm); margin-top:var(--space-sm);">
+              <button class="modal__button modal__button--primary" id="generateReqBtn" style="flex:1;">🚀 Generate Requirements</button>
+              <button class="modal__button" id="clearScopeBtn">✕ Clear</button>
+            </div>
+            <div class="workspace-status" id="workspaceStatus">Ready. Select nodes in the graph.</div>
+          </div>
+          <div class="workspace-panel workspace-panel--right">
+            <div class="workspace-panel__label">
+              <span>Generated Requirements</span>
+              <div class="workspace-actions">
+                <button class="modal__button" id="copyReqBtn">📋 Copy</button>
+                <button class="modal__button" id="downloadReqBtn">⬇️ Download</button>
+              </div>
+            </div>
+            <div class="workspace-panel__content workspace-panel__content--code" id="reqOutput">
+              <span style="color:var(--theme-text-dim);">Requirements document will appear here after generation.</span>
+            </div>
+          </div>
+        </div>
+        <div class="workspace-bottom">
+          <div class="workspace-panel__label">Traceability Matrix</div>
+          <div style="flex:1; overflow-y:auto; border:1px solid var(--theme-border); border-radius:var(--radius-md); background:var(--theme-surface);">
+            <table class="traceability-table"><thead><tr><th>Req ID</th><th>Description</th><th>Source Node</th></tr></thead><tbody id="matrixBody"><tr><td colspan="3" style="text-align:center; padding:var(--space-lg); color:var(--theme-text-dim);">No requirements generated yet.</td></tr></tbody></table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>

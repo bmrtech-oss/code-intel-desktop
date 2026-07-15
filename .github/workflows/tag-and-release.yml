@@ -1,0 +1,55 @@
+name: Tag and Trigger Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Which semver part to bump (patch, minor, major)'
+        required: false
+        default: 'patch'
+      manual_version:
+        description: 'Use an exact version (e.g. 1.2.3) instead of bumping'
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  tag_and_push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch tags
+        run: git fetch --tags
+
+      - name: Determine next version and create tag
+        env:
+          INPUT_RELEASE_TYPE: ${{ github.event.inputs.release_type }}
+          INPUT_MANUAL_VERSION: ${{ github.event.inputs.manual_version }}
+        run: |
+          set -eux
+          latest_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "Latest tag: $latest_tag"
+          latest=${latest_tag#v}
+          if [ -n "${INPUT_MANUAL_VERSION}" ]; then
+            new_version=${INPUT_MANUAL_VERSION}
+          else
+            IFS='.' read -r major minor patch <<<"$latest"
+            case "$INPUT_RELEASE_TYPE" in
+              major)
+                major=$((major+1)); minor=0; patch=0;;
+              minor)
+                minor=$((minor+1)); patch=0;;
+              *)
+                patch=$((patch+1));;
+            esac
+            new_version="$major.$minor.$patch"
+          fi
+          tag="v${new_version}"
+          echo "Tagging: $tag"
+          git tag -a "$tag" -m "Release $tag"
+          git push origin "$tag"
