@@ -1,0 +1,41 @@
+{
+  "productName": "code-intel-desktop",
+  "version": "0.1.0",
+  "identifier": "com.bmrtech.codeintel",
+  "build": {
+    "beforeDevCommand": "",
+    "beforeBuildCommand": "",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../src"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Code-Intel Desktop",
+        "width": 1280,
+        "height": 800,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'"
+    }
+  },
+  "capabilities": [
+    {
+      "identifier": "main-capability",
+      "description": "Permissions for the main window",
+      "windows": ["main"],
+      "permissions": [
+        "core:default",
+        "shell:default",
+        "dialog:default",
+        "fs:default",
+        "clipboard:default",
+        "opener:default"
+      ]
+    }
+  ]
+}
