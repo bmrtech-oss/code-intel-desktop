@@ -110,3 +110,27 @@ Usage examples:
 ./scripts/verify_bundles.sh
 ```
 
+## Run workflows manually
+
+The GitHub workflows in this repository are configured to run manually via `workflow_dispatch`.
+
+### UI method
+
+1. Open the repository on GitHub.
+2. Go to `Actions`.
+3. Select the workflow (`CI Build` or `Release Binaries`).
+4. Click `Run workflow`.
+5. Choose the branch you want to run against (for example `ci/release-automation`).
+6. Click `Run workflow`.
+
+### CLI method (recommended from repo root)
+
+If you have the GitHub CLI installed and authenticated, run from the repository root:
+
+```bash
+cd /d/D:/work-root/codebase/code-intel-desktop
+gh workflow run ci.yml --ref ci/release-automation
+```
+
+If you run the command outside the repository, `gh` will fail with "not a git repository".
+
