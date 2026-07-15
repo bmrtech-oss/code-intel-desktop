@@ -1,5 +1,7 @@
 # Tauri + Vanilla
 
+[![CI Build](https://github.com/bmrtech-oss/code-intel-desktop/actions/workflows/ci.yml/badge.svg)](https://github.com/bmrtech-oss/code-intel-desktop/actions/workflows/ci.yml)
+
 This template should help get you started developing with Tauri in vanilla HTML, CSS and Javascript.
 
 ## Recommended IDE Setup
