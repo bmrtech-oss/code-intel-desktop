@@ -1,3 +1,6 @@
+// Debug: confirm this script is loaded in the browser console
+console.log('main.js loaded');
+
 (function() {
   // === Theme Manager ===
   const getPreferredTheme = () => {
@@ -41,10 +44,12 @@
         if (!resp.ok) throw new Error('Server unreachable');
         const data = await resp.json();
         this.connected = true;
+        this.connectError = null;
         return data;
       } catch (e) {
         this.connected = false;
-        console.warn('Fallback to mock data. Server error:', e.message);
+        this.connectError = e.message || String(e);
+        console.warn('Fallback to mock data. Server error:', this.connectError);
         return { status: 'mock', version: '0.0.0', index: 'ready' };
       }
     }
@@ -115,12 +120,12 @@
     }
 
     // === LLM Requirements Generation ===
-    async generateRequirements(nodeIds, context, model) {
+    async generateRequirements(nodeIds, context, provider, model) {
       try {
         const resp = await fetch(`${this.baseUrl}/api/llm/generate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ nodeIds, context, model })
+          body: JSON.stringify({ nodeIds, context, provider, model })
         });
         if (!resp.ok) throw new Error('LLM generation failed');
         return await resp.json();
@@ -140,8 +145,24 @@
       }
     }
 
+    canFetchUrl(url) {
+      try {
+        const parsed = new URL(url);
+        return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+      } catch (e) {
+        return false;
+      }
+    }
+
     // === MCP Discovery ===
     async getMCPInfo() {
+      if (!this.canFetchUrl(this.mcpUrl)) {
+        console.warn('Skipping MCP discovery: unsupported protocol for browser fetch:', this.mcpUrl);
+        this.mcpConnected = false;
+        this.mcpTools = [];
+        return { tools: [] };
+      }
+
       try {
         const resp = await fetch(`${this.mcpUrl}/info`, { signal: AbortSignal.timeout(2000) });
         if (!resp.ok) throw new Error('MCP endpoint unreachable');
@@ -293,38 +314,54 @@
   // === Filters ===
   function setupFilters() {
     const chips = document.querySelectorAll('.filter-chip');
+    const legendRows = document.querySelectorAll('.legend__row.legend-filter');
     let activeType = 'all';
+
+    const setActiveType = (type) => {
+      activeType = type;
+      chips.forEach(c => c.classList.toggle('filter-chip--active', c.dataset.type === type));
+      legendRows.forEach(row => row.classList.toggle('legend-filter--active', row.dataset.type === type));
+      applyFilter();
+    };
+
+    const applyFilter = () => {
+      if (!cy) return;
+      const nodes = cy.nodes();
+      if (activeType === 'all') {
+        nodes.style('opacity', 1);
+        nodes.style('display', 'element');
+        cy.edges().style('opacity', 1);
+        cy.edges().style('display', 'element');
+      } else {
+        nodes.forEach(node => {
+          const type = node.data('type');
+          if (type === activeType) {
+            node.style('opacity', 1);
+            node.style('display', 'element');
+          } else {
+            node.style('opacity', 0.1);
+            node.style('display', 'element');
+          }
+        });
+        cy.edges().style('opacity', (edge) => {
+          const src = edge.data('source');
+          const tgt = edge.data('target');
+          const srcVisible = cy.getElementById(src).style('opacity') !== 0.1;
+          const tgtVisible = cy.getElementById(tgt).style('opacity') !== 0.1;
+          return (srcVisible && tgtVisible) ? 1 : 0.1;
+        });
+      }
+    };
+
     chips.forEach(chip => {
       chip.addEventListener('click', () => {
-        chips.forEach(c => c.classList.remove('filter-chip--active'));
-        chip.classList.add('filter-chip--active');
-        activeType = chip.dataset.type;
-        if (!cy) return;
-        const nodes = cy.nodes();
-        if (activeType === 'all') {
-          nodes.style('opacity', 1);
-          nodes.style('display', 'element');
-          cy.edges().style('opacity', 1);
-          cy.edges().style('display', 'element');
-        } else {
-          nodes.forEach(node => {
-            const type = node.data('type');
-            if (type === activeType) {
-              node.style('opacity', 1);
-              node.style('display', 'element');
-            } else {
-              node.style('opacity', 0.1);
-              node.style('display', 'element');
-            }
-          });
-          cy.edges().style('opacity', (edge) => {
-            const src = edge.data('source');
-            const tgt = edge.data('target');
-            const srcVisible = cy.getElementById(src).style('opacity') !== 0.1;
-            const tgtVisible = cy.getElementById(tgt).style('opacity') !== 0.1;
-            return (srcVisible && tgtVisible) ? 1 : 0.1;
-          });
-        }
+        setActiveType(chip.dataset.type);
+      });
+    });
+
+    legendRows.forEach(row => {
+      row.addEventListener('click', () => {
+        setActiveType(row.dataset.type);
       });
     });
   }
@@ -341,6 +378,7 @@
 
   // === File Tree ===
   function buildFileTree() {
+    console.log('buildFileTree: nodeMap size=', Object.keys(nodeMap || {}).length);
     const container = document.getElementById('fileTree');
     if (!container || !service.graphData) return;
     const folderMap = { 'auth': ['n1', 'n13'], 'user': ['n5', 'n18'], 'utils': ['n9', 'n11'], 'db': ['n7'], 'email': ['n16'], 'root': ['n20'] };
@@ -392,7 +430,7 @@
         if (nodeId && cy) {
           const el = cy.getElementById(nodeId);
           if (el && el.length) {
-            cy.eles().unselect();
+            cy.elements().unselect();
             el.select();
             showNodeDetails(el);
             cy.animate({ center: { eles: el }, zoom: 2.5, duration: 400 });
@@ -473,10 +511,14 @@
       return;
     }
 
-    const model = localStorage.getItem('code-intel-llm-model') || 'gpt-4';
-    const apiKey = localStorage.getItem('code-intel-llm-key-' + model);
+    const provider = localStorage.getItem('code-intel-llm-provider') || 'openai';
+    let model = localStorage.getItem('code-intel-llm-model') || 'gpt-4';
+    if (model === 'custom') {
+      model = localStorage.getItem('code-intel-llm-custom-model') || '';
+    }
+    const apiKey = localStorage.getItem('code-intel-llm-key-' + provider);
     if (!apiKey) {
-      status.textContent = '⚠️ API key not set for ' + model + '. Please add your key in Settings.';
+      status.textContent = '⚠️ API key not set for ' + provider + '. Please add your key in Settings.';
       return;
     }
 
@@ -485,7 +527,8 @@
     status.textContent = 'Generating requirements using ' + model + '...';
 
     try {
-      const result = await service.generateRequirements(selectedNodeIds, document.getElementById('reqPrompt').value, model);
+      const provider = localStorage.getItem('code-intel-llm-provider') || 'openai';
+      const result = await service.generateRequirements(selectedNodeIds, document.getElementById('reqPrompt').value, provider, model);
       output.textContent = result.markdown;
       let rows = '';
       (result.traceability || []).forEach(row => {
@@ -501,7 +544,7 @@
             const node = cy.getElementById(nodeId);
             if (node && node.length) {
               cy.animate({ center: { eles: node }, zoom: 2.5, duration: 400 });
-              cy.eles().unselect();
+              cy.elements().unselect();
               node.select();
               closeRequirementsWorkspace();
             }
@@ -530,11 +573,16 @@
     openBtn.addEventListener('click', () => {
       document.getElementById('settingsServerUrl').value = service.baseUrl;
       document.getElementById('settingsMcpUrl').value = service.mcpUrl;
+      const storedProvider = localStorage.getItem('code-intel-llm-provider') || 'openai';
       const storedModel = localStorage.getItem('code-intel-llm-model') || 'gpt-4';
+      const storedCustomModel = localStorage.getItem('code-intel-llm-custom-model') || '';
+      document.getElementById('settingsProvider').value = storedProvider;
       document.getElementById('settingsLLM').value = storedModel;
-      const storedKey = localStorage.getItem('code-intel-llm-key-' + storedModel) || '';
+      document.getElementById('settingsCustomModel').value = storedCustomModel;
+      const storedKey = localStorage.getItem('code-intel-llm-key-' + storedProvider) || '';
       document.getElementById('settingsApiKey').value = storedKey ? '••••••••' : '';
       document.getElementById('settingsKeyStatus').textContent = storedKey ? 'Key saved' : 'Key not saved';
+      document.getElementById('settingsCustomModelField').classList.toggle('modal__field--hidden', storedModel !== 'custom');
       modal.classList.add('open');
     });
 
@@ -547,7 +595,9 @@
     saveBtn.addEventListener('click', () => {
       const serverUrl = document.getElementById('settingsServerUrl').value.trim();
       const mcpUrl = document.getElementById('settingsMcpUrl').value.trim();
+      const provider = document.getElementById('settingsProvider').value;
       const model = document.getElementById('settingsLLM').value;
+      const customModel = document.getElementById('settingsCustomModel').value.trim();
       let key = document.getElementById('settingsApiKey').value.trim();
 
       if (serverUrl) {
@@ -558,14 +608,33 @@
         localStorage.setItem('code-intel-mcp-url', mcpUrl);
         service.mcpUrl = mcpUrl;
       }
+      localStorage.setItem('code-intel-llm-provider', provider);
       localStorage.setItem('code-intel-llm-model', model);
+      if (model === 'custom') {
+        localStorage.setItem('code-intel-llm-custom-model', customModel);
+      }
       if (key && key !== '••••••••') {
-        localStorage.setItem('code-intel-llm-key-' + model, key);
+        localStorage.setItem('code-intel-llm-key-' + provider, key);
       }
 
       modal.classList.remove('open');
       loadGraph();
       refreshMCPTools(); // Refresh MCP tools after save
+    });
+
+    const providerSelect = document.getElementById('settingsProvider');
+    const modelSelect = document.getElementById('settingsLLM');
+    const customModelField = document.getElementById('settingsCustomModelField');
+
+    modelSelect.addEventListener('change', () => {
+      customModelField.classList.toggle('modal__field--hidden', modelSelect.value !== 'custom');
+    });
+
+    providerSelect.addEventListener('change', () => {
+      const provider = providerSelect.value;
+      const storedKey = localStorage.getItem('code-intel-llm-key-' + provider) || '';
+      document.getElementById('settingsApiKey').value = storedKey ? '••••••••' : '';
+      document.getElementById('settingsKeyStatus').textContent = storedKey ? 'Key saved' : 'Key not saved';
     });
 
     document.addEventListener('keydown', (e) => {
@@ -586,12 +655,15 @@
         statusEl.textContent = 'Connected';
         dotEl.style.background = 'var(--theme-success)';
       } else {
-        statusEl.textContent = 'Mock mode';
+        statusEl.textContent = service.connectError && /Failed to fetch|NetworkError|CORS/i.test(service.connectError)
+          ? 'Browser CORS / network fallback'
+          : 'Mock mode';
         dotEl.style.background = 'var(--theme-warning)';
       }
-    } catch {
+    } catch (e) {
       statusEl.textContent = 'Disconnected';
       dotEl.style.background = 'var(--theme-danger)';
+      console.warn('Connection error:', e);
     }
 
     const graph = await service.getGraph();
@@ -663,7 +735,7 @@
 
     cy.on('tap', function(evt) {
       if (evt.target === cy) {
-        cy.eles().unselect();
+        cy.elements().unselect();
         selectedNodeIds = [];
         updateWorkspaceScope();
         showEmptyDetails();
@@ -684,7 +756,7 @@
     });
     document.getElementById('generateReqBtn').addEventListener('click', generateRequirements);
     document.getElementById('clearScopeBtn').addEventListener('click', () => {
-      if (cy) cy.eles().unselect();
+      if (cy) cy.elements().unselect();
       selectedNodeIds = [];
       updateWorkspaceScope();
       document.getElementById('reqOutput').textContent = 'Requirements document will appear here after generation.';
@@ -726,6 +798,171 @@
     });
   }
 
+  // === Splitter (Resizable Panes) ===
+  function enableSplitter() {
+    const container = document.querySelector('.main-area');
+    const left = document.querySelector('.left-pane');
+    const splitter = document.querySelector('.splitter');
+    const right = document.querySelector('.right-pane');
+    if (!container || !left || !splitter || !right) return;
+
+    // initial width from localStorage
+    const saved = localStorage.getItem('split-left-width');
+    if (saved) {
+      const width = parseInt(saved, 10);
+      if (!Number.isNaN(width)) {
+        container.style.gridTemplateColumns = `${width}px 12px minmax(0, 1fr)`;
+      }
+    }
+
+    let dragging = false;
+    let startX = 0;
+    let startWidth = 0;
+    const min = 200;
+    const max = () => Math.max(240, container.clientWidth - 320);
+
+    const onPointerDown = (e) => {
+      console.log('splitter: pointerdown');
+      dragging = true;
+      startX = (e.clientX ?? (e.touches && e.touches[0] && e.touches[0].clientX)) || 0;
+      startWidth = left.getBoundingClientRect().width;
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      try { if (e.pointerId && splitter.setPointerCapture) splitter.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+      window.addEventListener('pointermove', onPointerMove);
+      window.addEventListener('pointerup', onPointerUp);
+      window.addEventListener('mousemove', onPointerMove);
+      window.addEventListener('mouseup', onPointerUp);
+      window.addEventListener('touchmove', onPointerMove, { passive: false });
+      window.addEventListener('touchend', onPointerUp);
+    };
+
+    const onPointerMove = (e) => {
+      if (!dragging) return;
+      if (e.cancelable) e.preventDefault();
+      const clientX = (e.clientX ?? (e.touches && e.touches[0] && e.touches[0].clientX)) || 0;
+      console.log('splitter: pointermove', clientX, startX, dragging);
+      const dx = clientX - startX;
+      let newWidth = Math.round(startWidth + dx);
+      newWidth = Math.max(min, Math.min(newWidth, max()));
+      left.style.width = `${newWidth}px`;
+      container.style.gridTemplateColumns = `${newWidth}px 12px minmax(0, 1fr)`;
+    };
+
+    const onPointerUp = (e) => {
+      if (!dragging) return;
+      dragging = false;
+      const width = left.getBoundingClientRect().width;
+      localStorage.setItem('split-left-width', Math.round(width));
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      try { if (e && e.pointerId && splitter.releasePointerCapture) splitter.releasePointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('mousemove', onPointerMove);
+      window.removeEventListener('mouseup', onPointerUp);
+      window.removeEventListener('touchmove', onPointerMove);
+      window.removeEventListener('touchend', onPointerUp);
+    };
+
+    splitter.addEventListener('pointerdown', onPointerDown);
+    splitter.addEventListener('touchstart', onPointerDown, { passive: false });
+
+    // keyboard accessibility
+    splitter.addEventListener('keydown', (e) => {
+      const step = 20;
+      const leftWidth = left.getBoundingClientRect().width;
+      let w = leftWidth;
+      if (e.key === 'ArrowLeft') {
+        w = Math.max(min, leftWidth - step);
+      } else if (e.key === 'ArrowRight') {
+        w = Math.min(max(), leftWidth + step);
+      }
+      if (w !== leftWidth) {
+        container.style.gridTemplateColumns = `${w}px 12px minmax(0, 1fr)`;
+        localStorage.setItem('split-left-width', Math.round(w));
+      }
+    });
+
+    window.addEventListener('resize', () => {
+      const leftWidth = left.getBoundingClientRect().width;
+      if (leftWidth > max()) {
+        const w = Math.max(min, max());
+        left.style.width = w + 'px';
+        localStorage.setItem('split-left-width', Math.round(w));
+      }
+    });
+  }
+
+  function enableRightSplitter() {
+    const rightPane = document.querySelector('.right-pane');
+    const splitter = document.querySelector('.splitter--vertical');
+    if (!rightPane || !splitter) return;
+
+    const graph = rightPane.querySelector('.graph-viewer');
+    const details = rightPane.querySelector('.details-panel');
+    if (!graph || !details) return;
+
+    const saved = localStorage.getItem('split-right-width');
+    if (saved) {
+      const width = parseInt(saved, 10);
+      if (!Number.isNaN(width)) {
+        rightPane.style.gridTemplateColumns = `minmax(0, 1fr) 12px ${width}px`;
+      }
+    }
+
+    let dragging = false;
+    let startX = 0;
+    let startWidth = 0;
+    const min = 240;
+    const max = () => Math.max(240, rightPane.clientWidth - 240);
+
+    const onPointerDown = (e) => {
+      dragging = true;
+      startX = (e.clientX ?? (e.touches && e.touches[0] && e.touches[0].clientX)) || 0;
+      startWidth = details.getBoundingClientRect().width;
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      try { if (e.pointerId && splitter.setPointerCapture) splitter.setPointerCapture(e.pointerId); } catch (err) { }
+      window.addEventListener('pointermove', onPointerMove);
+      window.addEventListener('pointerup', onPointerUp);
+      window.addEventListener('mousemove', onPointerMove);
+      window.addEventListener('mouseup', onPointerUp);
+      window.addEventListener('touchmove', onPointerMove, { passive: false });
+      window.addEventListener('touchend', onPointerUp);
+    };
+
+    const onPointerMove = (e) => {
+      if (!dragging) return;
+      if (e.cancelable) e.preventDefault();
+      const clientX = (e.clientX ?? (e.touches && e.touches[0] && e.touches[0].clientX)) || 0;
+      const dx = startX - clientX;
+      let newWidth = Math.round(startWidth + dx);
+      newWidth = Math.max(min, Math.min(newWidth, max()));
+      details.style.width = `${newWidth}px`;
+      rightPane.style.gridTemplateColumns = `minmax(0, 1fr) 12px ${newWidth}px`;
+    };
+
+    const onPointerUp = (e) => {
+      if (!dragging) return;
+      dragging = false;
+      const width = details.getBoundingClientRect().width;
+      localStorage.setItem('split-right-width', Math.round(width));
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      try { if (e && e.pointerId && splitter.releasePointerCapture) splitter.releasePointerCapture(e.pointerId); } catch (err) { }
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('mousemove', onPointerMove);
+      window.removeEventListener('mouseup', onPointerUp);
+      window.removeEventListener('touchmove', onPointerMove);
+      window.removeEventListener('touchend', onPointerUp);
+    };
+
+    splitter.addEventListener('pointerdown', onPointerDown);
+    splitter.addEventListener('touchstart', onPointerDown, { passive: false });
+  }
+
   // === Initialization ===
   document.addEventListener('DOMContentLoaded', () => {
     const theme = getPreferredTheme();
@@ -750,6 +987,8 @@
     setupWorkspace();
     loadGraph();
     refreshMCPTools(); // Also refresh MCP tools on load
+    enableSplitter();
+    enableRightSplitter();
 
     // Periodic health check (every 30 seconds)
     setInterval(() => {

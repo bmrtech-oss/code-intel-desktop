@@ -1,4 +1,4 @@
-Repository Secrets — Manual UI Setup
+# Repository Secrets — Manual UI Setup
 
 This document describes how to add the repository secrets required for Windows code signing and macOS notarization via the GitHub web UI, plus local commands to prepare the secret values.
 

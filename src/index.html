@@ -34,8 +34,8 @@
 
   <!-- ===== MAIN AREA ===== -->
   <div class="main-area">
-    <!-- SIDEBAR -->
-    <aside class="sidebar">
+    <!-- SIDEBAR (left pane) -->
+    <aside class="sidebar left-pane">
       <section class="sidebar-section">
         <div class="sidebar-section__title">File Tree</div>
         <div class="file-tree" id="fileTree"></div>
@@ -79,27 +79,27 @@
       <section class="sidebar-section">
         <div class="sidebar-section__title">Legend</div>
         <div class="legend" id="legend">
-          <div class="legend__row">
+          <div class="legend__row legend-filter" data-type="function">
             <span class="legend__swatch" style="background:var(--node-function);"></span>
             <span class="legend__label">Function</span>
           </div>
-          <div class="legend__row">
+          <div class="legend__row legend-filter" data-type="class">
             <span class="legend__swatch" style="background:var(--node-class);"></span>
             <span class="legend__label">Class</span>
           </div>
-          <div class="legend__row">
+          <div class="legend__row legend-filter" data-type="module">
             <span class="legend__swatch" style="background:var(--node-module);"></span>
             <span class="legend__label">Module</span>
           </div>
-          <div class="legend__row">
+          <div class="legend__row legend-filter" data-type="file">
             <span class="legend__swatch" style="background:var(--node-file);"></span>
             <span class="legend__label">File</span>
           </div>
-          <div class="legend__row">
+          <div class="legend__row legend-filter" data-type="variable">
             <span class="legend__swatch" style="background:var(--node-variable);"></span>
             <span class="legend__label">Variable</span>
           </div>
-          <div class="legend__row">
+          <div class="legend__row legend-filter" data-type="enum">
             <span class="legend__swatch" style="background:var(--node-enum);"></span>
             <span class="legend__label">Enum</span>
           </div>
@@ -115,20 +115,26 @@
       </section>
     </aside>
 
-    <!-- GRAPH VIEWER -->
-    <main class="graph-viewer">
-      <div id="cy"></div>
-      <div class="graph-controls">
-        <button class="graph-controls__button" id="zoomInBtn" title="Zoom In">＋</button>
-        <button class="graph-controls__button" id="zoomOutBtn" title="Zoom Out">−</button>
-        <button class="graph-controls__button" id="fitBtn" title="Fit Graph">⊞</button>
-        <div class="graph-controls__divider"></div>
-        <button class="graph-controls__button" id="screenshotBtn" title="Screenshot">📷</button>
-      </div>
-    </main>
+    <!-- Splitter between left and right panes -->
+    <div class="splitter" role="separator" aria-orientation="vertical" tabindex="0"></div>
 
-    <!-- DETAILS PANEL -->
-    <aside class="details-panel">
+    <!-- RIGHT PANE: contains graph viewer and details -->
+    <div class="right-pane" id="rightPane">
+      <!-- GRAPH VIEWER -->
+      <main class="graph-viewer" id="graphViewer">
+        <div id="cy"></div>
+        <div class="graph-controls">
+          <button class="graph-controls__button" id="zoomInBtn" title="Zoom In">＋</button>
+          <button class="graph-controls__button" id="zoomOutBtn" title="Zoom Out">−</button>
+          <button class="graph-controls__button" id="fitBtn" title="Fit Graph">⊞</button>
+          <div class="graph-controls__divider"></div>
+          <button class="graph-controls__button" id="screenshotBtn" title="Screenshot">📷</button>
+        </div>
+      </main>
+      <div class="splitter splitter--vertical" role="separator" aria-orientation="vertical" tabindex="0"></div>
+
+      <!-- DETAILS PANEL -->
+      <aside class="details-panel" id="detailsPanel">
       <div class="details-panel__header">
         <div class="details-panel__header-title">Node Details</div>
         <div class="details-panel__node-name" id="detailName">—</div>
@@ -162,6 +168,7 @@
         </div>
       </div>
     </aside>
+  </div>
   </div>
 
   <!-- ===== STATUS BAR ===== -->
@@ -203,6 +210,14 @@
           <input type="url" id="settingsMcpUrl" placeholder="mcp://localhost:8080" value="mcp://localhost:8080" />
         </div>
         <div class="modal__field">
+          <label for="settingsProvider">LLM Provider</label>
+          <select id="settingsProvider">
+            <option value="openai">OpenAI</option>
+            <option value="openrouter">OpenRouter</option>
+            <option value="custom">Custom</option>
+          </select>
+        </div>
+        <div class="modal__field">
           <label for="settingsLLM">LLM Model</label>
           <select id="settingsLLM">
             <option value="gpt-4">GPT-4</option>
@@ -212,7 +227,13 @@
             <option value="llama-3-70b">Llama 3 70B</option>
             <option value="gemini-pro">Gemini Pro</option>
             <option value="mistral-large">Mistral Large</option>
+            <option value="custom">Custom model name...</option>
           </select>
+        </div>
+        <div class="modal__field modal__field--hidden" id="settingsCustomModelField">
+          <label for="settingsCustomModel">Custom model name</label>
+          <input type="text" id="settingsCustomModel" placeholder="e.g. gpt-4.1-mini or my-openrouter-model" />
+          <div class="modal__help">Enter the exact model identifier for your provider.</div>
         </div>
         <div class="modal__field">
           <label for="settingsApiKey">API Key</label>

@@ -70,8 +70,73 @@ body { font-family: var(--font-family); background: var(--theme-bg); color: var(
 .theme-toggle { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 1px solid var(--theme-border); border-radius: var(--radius-md); background: var(--theme-surface-elevated); color: var(--theme-text-primary); cursor: pointer; transition: all 150ms ease; font-size: 14px; }
 .theme-toggle:hover { background: var(--theme-surface); border-color: var(--theme-primary); }
 
-.main-area { display: flex; flex: 1; min-height: 0; overflow: hidden; }
-.sidebar { width: 240px; min-width: 240px; background: var(--theme-surface); border-right: 1px solid var(--theme-border); display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0; }
+.main-area {
+  display: grid;
+  grid-template-columns: 240px 12px minmax(0, 1fr);
+  grid-template-rows: 1fr;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  align-items: stretch;
+}
+
+/* Split layout: left sidebar and right pane (graph + details) */
+.left-pane {
+  min-width: 200px;
+  width: auto;
+}
+.right-pane {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 12px minmax(240px, 420px);
+  min-width: 0;
+  overflow: hidden;
+  align-items: stretch;
+}
+.right-pane > .graph-viewer {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+.right-pane > .details-panel {
+  min-width: 240px;
+  min-height: 0;
+  width: auto;
+  overflow: hidden;
+}
+
+/* Draggable splitter */
+.splitter {
+  width: 12px;
+  height: 100%;
+  background: rgba(128, 128, 128, 0.04);
+  cursor: col-resize;
+  -webkit-user-select: none;
+  user-select: none;
+  flex-shrink: 0;
+  position: relative;
+  pointer-events: auto;
+  z-index: 30;
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.splitter:hover {
+  background: rgba(128, 128, 128, 0.1);
+}
+.splitter::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 2px;
+  height: 40px;
+  background: rgba(0,0,0,0.15);
+  border-radius: 2px;
+}
+.splitter:active::after { background: rgba(0,0,0,0.4); }
+.sidebar { width: auto; min-width: 240px; background: var(--theme-surface); border-right: 1px solid var(--theme-border); display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0; }
 .sidebar-section { border-bottom: 1px solid var(--theme-border); padding: var(--space-md) var(--space-lg); flex-shrink: 0; }
 .sidebar-section:last-child { border-bottom: none; flex: 1; overflow-y: auto; }
 .sidebar-section__title { color: var(--theme-text-secondary); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-bottom: var(--space-sm); }
@@ -181,6 +246,17 @@ body { font-family: var(--font-family); background: var(--theme-bg); color: var(
   align-items: center;
   gap: var(--space-sm);
 }
+.legend__row.legend-filter {
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+}
+.legend__row.legend-filter:hover {
+  background: rgba(88, 166, 255, 0.08);
+}
+.legend__row.legend-filter--active {
+  background: rgba(88, 166, 255, 0.18);
+}
 .legend__swatch {
   width: 12px;
   height: 12px;
@@ -205,7 +281,7 @@ body { font-family: var(--font-family); background: var(--theme-bg); color: var(
 .graph-controls__button:hover { color: var(--theme-text-primary); background: var(--theme-border); }
 .graph-controls__divider { height: 1px; background: var(--theme-border); margin: var(--space-xs) 0; }
 
-.details-panel { width: 280px; min-width: 280px; background: var(--theme-surface); border-left: 1px solid var(--theme-border); display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0; }
+.details-panel { min-width: 240px; width: auto; background: var(--theme-surface); border-left: 1px solid var(--theme-border); display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0; }
 .details-panel__header { padding: var(--space-lg); border-bottom: 1px solid var(--theme-border); flex-shrink: 0; }
 .details-panel__header-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--theme-text-dim); font-weight: 600; margin-bottom: var(--space-xs); }
 .details-panel__node-name { font-size: 18px; font-weight: 600; color: var(--theme-text-primary); word-break: break-all; }
