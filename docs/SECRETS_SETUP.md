@@ -10,6 +10,8 @@ This document describes how to add the repository secrets required for Windows c
 - `APPLE_API_KEY_ID` — Apple key id (e.g. `ABC123DEFG`).
 - `APPLE_API_KEY_ISSUER_ID` — Apple issuer id (UUID string).
 
+See the full notarization and signing guide for usage examples and CI snippets: [docs/NOTARIZATION.md](docs/NOTARIZATION.md)
+
 ## Prepare secret values locally
 
 1. Create a base64-encoded PFX (Linux/macOS):
@@ -133,4 +135,8 @@ gh workflow run ci.yml --ref ci/release-automation
 ```
 
 If you run the command outside the repository, `gh` will fail with "not a git repository".
+
+## See also
+
+- Detailed signing and notarization steps: [docs/NOTARIZATION.md](docs/NOTARIZATION.md)
 
