@@ -4,6 +4,34 @@ This document provides a highly structured, phased implementation roadmap for in
 
 ---
 
+## Exact Sequential Order of Implementation Checklist
+
+To avoid broken boundaries or state mismatch during development, tasks should be executed in this exact order. Some backend steps can be built in parallel, but the frontend should only integrate after the corresponding backend endpoints are fully deployed and verified.
+
+```
+       [ BACKEND PIPELINE ]                       [ FRONTEND PIPELINE ]
+
+Step 1: Deploy GET /api/status          ───►    Step 2: Implement Handshake & Auto-Status
+Step 3: Implement /analyze /stream      ───►    Step 4: Implement Native & Remote Ingestion UI
+Step 5: Implement POST /config/llm      ───►    Step 6: Implement LLM Settings Sync & Handshake
+Step 7: Deploy Branches & Tree APIs     ───►    Step 8: Implement Commit Timeline & Versioned Tree
+Step 9: Deploy Cytoscape JSON API       ───►    Step 10: Implement Level-of-Detail Canvas
+```
+
+### Core Execution Flow Detail:
+1. **[Backend] Step 1: Deploy Invariant Handshake Endpoint** (Verify `GET /api/status` carries environment metadata like Docker boundaries).
+2. **[Frontend] Step 2: Connection Handshake & Error Boundaries** (Implement automated endpoint connection, status bar indicator state, and the read-only offline degradation overlay).
+3. **[Backend] Step 3: Implement SSE Progress Stream** (Connect `GitRepoHandler` and RQ job events to the SSE `/analyze/stream` output).
+4. **[Frontend] Step 4: Native absolute-path and Remote Git cloning selectors** (Integrate Tauri's system dialogue box, remote clone text fields, and subscribe to the progress progress stream).
+5. **[Backend] Step 5: Implement Secure In-Memory Settings Cache** (Deploy `POST /config/llm` transient storage helper).
+6. **[Frontend] Step 6: Implement LLM Settings Handshake** (Interept Settings modal submissions and sync parameters dynamically).
+7. **[Backend] Step 7: Deploy Branches, Commits, and File Tree view APIs** (Create `GET /repo/branches-and-commits` and `GET /repo/tree` views).
+8. **[Frontend] Step 8: Build the Timeline Travel and Versioned Tree Sidebar** (Render the branch dropdown, commit slider cards, and dynamically reload trees upon selection).
+9. **[Backend] Step 9: Deploy Cytoscape-optimized JSON endpoint** (Expose `GET /graph?level=file` and symbol resolution queries).
+10. **[Frontend] Step 10: Level-of-Detail (LOD) interactive Cytoscape Canvas** (Switch default loading to high-level FileNodes and expand child class/function nodes lazy-style on double-click).
+
+---
+
 ## Phase 1: Service Status Validation, Offline Resilience & Zero-State UI Setup
 **Goal:** Establish secure communication between the Tauri desktop app and the backend, set up a quiet, distraction-free "zero-noise" visual home state, and handle endpoint disconnections gracefully.
 
