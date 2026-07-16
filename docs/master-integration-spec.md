@@ -14,6 +14,7 @@ flowchart TD
         V_Canvas[Cytoscape.js Canvas]
         V_Tree[File Tree View]
         V_Nav[Branch/Commit Navigator]
+        V_Set[Settings Model: LLM/Provider]
     end
 
     subgraph "Backend Plane (FastAPI + RQ)"
@@ -26,6 +27,7 @@ flowchart TD
     V_Canvas -->|GET /graph?version=SHA| B_Server
     V_Tree -->|GET /repo/tree?version=SHA| B_Server
     V_Nav -->|GET /repo/commits| B_Server
+    V_Set -->|POST /config/llm| B_Server
 
     B_MCP -->|Reads| B_Store
     B_CLI -->|Writes/Reads| B_Store
@@ -62,6 +64,10 @@ To transform the current mock-heavy desktop app into a high-signal production co
 * **LOD Queries:** Modify Cytoscape loading logic to only request FileNodes initially.
 * **Lazy Node Expansion:** Double-clicking file nodes fetches local definitions and draws them on demand, keeping memory utilization minimal.
 
+### F. LLM Settings Sync Handshake
+* **Settings Panel Integration:** The Settings UI allows setting the LLM Provider, Model Name, and API Key.
+* **Dynamic Config Handshake:** Whenever settings are saved, the client issues `POST /config/llm` carrying the selected credentials. This guarantees that background workers use the specified LLM pipeline (local Ollama/vLLM or remote APIs like OpenRouter/OpenAI) on-demand.
+
 ---
 
 ## 3. Backend Service: Required Changes
@@ -77,6 +83,8 @@ To support the highly focused desktop client, the backend must expose a few fron
    * **Format:** `{"nodes": [{"id": "...", "label": "...", "type": "..."}], "edges": [{"source": "...", "target": "...", "type": "..."}]}`
 3. **`GET /repo/branches-and-commits`**
    * **Purpose:** Queries the Git-DAG model and returns all branches and chronological lists of parent/child commit SHAs.
+4. **`POST /config/llm`**
+   * **Purpose:** Dynamically configures LLM runtime context on the backend (storing the Provider, Model Name, and API Key in the backend environment/session). Background workers ingest these credentials when processing async `/requirements` or semantic summary generation tasks.
 
 ### B. Path & Remote Cloner Translation Registry
 * **Path Translation:** Implement a routing helper that automatically maps host directories (passed by Tauri native dialogue) into backend-accessible folder mounts or processes uploaded ZIP payloads natively.

@@ -64,10 +64,27 @@ This document provides a highly structured, phased implementation roadmap for in
 
 ---
 
-## Phase 3: Timeline Travel & Git-DAG Sidebar
-**Goal:** Render historical repository contexts using the backend's bitemporal Git-DAG records.
+## Phase 3: Dynamic LLM Settings Handshake & Timeline Travel
+**Goal:** Synchronize saved LLM settings dynamically with the backend processing queue, and render historical repository contexts.
 
-### Task 3.1: Branches & Commit History Rail
+### Task 3.1: Save & Sync Settings Handshake
+* **Files to modify:** `src/main.js`
+* **Prompt:**
+> **Context:** When the developer configures their LLM credentials (Provider, Model Name, API Key) in the Settings panel, the backend needs to receive these settings dynamically so its asynchronous worker can invoke the proper LLM endpoint.
+> **Task:**
+> 1. In `src/main.js`, locate the save click handler of the Settings Modal (`#settingsSave`).
+> 2. Read the saved Settings fields: Provider (e.g., `openai`, `openrouter`), Model Name (including custom entry), and the raw API Key.
+> 3. When settings are saved successfully, issue a `POST` request to `${baseUrl}/config/llm` carrying:
+>    ```json
+>    {
+>      "provider": "<provider>",
+>      "model": "<model>",
+>      "api_key": "<key>"
+>    }
+>    ```
+> 4. Catch failures gracefully; if the handshake fails, alert the user but preserve local storage configurations.
+
+### Task 3.2: Branches & Commit History Rail
 * **Files to modify:** `src/index.html`, `src/main.js`
 * **Prompt:**
 > **Context:** The developer needs a user interface to view and jump between different Git branches and specific historical commits.
@@ -78,7 +95,7 @@ This document provides a highly structured, phased implementation roadmap for in
 > 4. Populate `#commitTimelineRail` with chronological commit cards showing the commit SHA, author, and timestamp.
 > 5. Bind click listeners to the commit cards: clicking a commit SHA must set `service.currentCommitSHA = sha` and trigger a graph re-load for that snapshot.
 
-### Task 3.2: Version-Filtered Repository Tree
+### Task 3.3: Version-Filtered Repository Tree
 * **Files to modify:** `src/main.js`
 * **Prompt:**
 > **Context:** The file tree directory structure should dynamically represent what files existed in the repository at the currently selected commit SHA.
