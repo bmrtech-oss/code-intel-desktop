@@ -45,8 +45,9 @@ To transform the current mock-heavy desktop app into a high-signal production co
 * **State Simplification:** Replace multi-variable state managers with a single immutable coordinate: `(selectedRepoPathOrUrl, selectedCommitSHA)`.
 * **The "Zero-Noise" Canvas:** Ensure that on initial load, the Cytoscape canvas is entirely empty. It should only render nodes upon explicit selection from the file tree or search bar, ensuring a 100% signal ratio.
 
-### B. Connection & Host Discovery Panel
+### B. Connection, Host Discovery & Offline Graceful Degradation
 * **Automatic Service Detection:** On startup, the UI issues a lightweight fetch to `${baseUrl}/status`.
+* **Graceful Degradation Guard:** If the connection goes offline or is lost during active use, the UI dynamically displays a clear overlay banner: `"Server Disconnected — Viewing Offline Local Cache."` This prevents unhandled promise errors and allows the developer to continue exploring previously loaded graph nodes in read-only offline mode.
 * **Container Environment Helper:** If the backend reports running inside Docker, Tauri automatically intercepts file paths to ensure correct shared volume mount mappings (translating host paths to container paths).
 
 ### C. Live Ingestion Screen (Local & Remote Git Ingestion)
@@ -64,9 +65,10 @@ To transform the current mock-heavy desktop app into a high-signal production co
 * **LOD Queries:** Modify Cytoscape loading logic to only request FileNodes initially.
 * **Lazy Node Expansion:** Double-clicking file nodes fetches local definitions and draws them on demand, keeping memory utilization minimal.
 
-### F. LLM Settings Sync Handshake
+### F. LLM Settings Sync Handshake & In-Memory Security
 * **Settings Panel Integration:** The Settings UI allows setting the LLM Provider, Model Name, and API Key.
 * **Dynamic Config Handshake:** Whenever settings are saved, the client issues `POST /config/llm` carrying the selected credentials. This guarantees that background workers use the specified LLM pipeline (local Ollama/vLLM or remote APIs like OpenRouter/OpenAI) on-demand.
+* **Transient Memory Security:** Key configurations are explicitly loaded into the backend's transient memory workspace per-session rather than written to log files or persistent databases.
 
 ---
 
@@ -84,7 +86,7 @@ To support the highly focused desktop client, the backend must expose a few fron
 3. **`GET /repo/branches-and-commits`**
    * **Purpose:** Queries the Git-DAG model and returns all branches and chronological lists of parent/child commit SHAs.
 4. **`POST /config/llm`**
-   * **Purpose:** Dynamically configures LLM runtime context on the backend (storing the Provider, Model Name, and API Key in the backend environment/session). Background workers ingest these credentials when processing async `/requirements` or semantic summary generation tasks.
+   * **Purpose:** Dynamically configures LLM runtime context on the backend (storing the Provider, Model Name, and API Key in the backend's transient in-memory cache). Asynchronous workers pull credentials directly from this secure cache, preventing API keys from ever being written to PostgreSQL tables or log files.
 
 ### B. Path & Remote Cloner Translation Registry
 * **Path Translation:** Implement a routing helper that automatically maps host directories (passed by Tauri native dialogue) into backend-accessible folder mounts or processes uploaded ZIP payloads natively.

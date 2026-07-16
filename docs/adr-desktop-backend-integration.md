@@ -6,12 +6,13 @@ Decoupled Desktop-to-Backend Integration Plan for Code-Intel with Versioned Grap
 ## Context & Problem Statement
 The current version of the `code-intel-desktop` client is a mock-heavy Tauri shell. To make it a true frontend for the `code-intel` platform, we must integrate it with the versioned relational Git-DAG back-end.
 
-We need to resolve four primary challenges:
+We need to resolve five primary challenges:
 1. **FileSystem isolation:** How a containerized back-end reads local repositories chosen by the Tauri file dialog.
 2. **Visual complexity and scalability:** Rendering dense call graphs without browser freeze.
 3. **Data synchronisation:** Ensuring timeline-travel, branch/commit switching, search, and requirements generation remain consistent and aligned with the backend's topological storage paradigms.
 4. **Remote Repositories Ingestion:** How the UI supports seamless remote Git repository paths (HTTPS/SSH) alongside local workspace files.
 5. **Runtime LLM Configuration Dynamic Handshake:** Syncing frontend-defined LLM parameters (Provider, Model Name, and API Key) securely with backend asynchronous generation tasks.
+6. **Graceful Offline Resilience:** Handling physical network or endpoint disconnections gracefully.
 
 This ADR defines the formal architectural blueprint, system and deployment design, and a phased rollout plan.
 
@@ -137,6 +138,7 @@ backend --> db_sql
 * **Complete Time-Travel:** Leveraging bitemporal version queries enables consistent, snapshot-accurate timeline travel across different commits.
 * **Flexible Sourcing:** Direct support for remote branches allows developers to analyze repositories instantly without pre-cloning them locally.
 * **Dynamic, Secure Key Handshake:** Passing LLM parameters dynamically ensures remote generation works securely on any client infrastructure without pinning hardcoded API keys in backend configurations.
+* **Graceful Offline Protection:** Keeps the visual interface fully explorable in read-only mode during physical connectivity losses.
 * **True Local Privacy:** No code or structural data leaves the user's host machine.
 
 ### Negative

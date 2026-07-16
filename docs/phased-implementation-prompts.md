@@ -4,8 +4,8 @@ This document provides a highly structured, phased implementation roadmap for in
 
 ---
 
-## Phase 1: Service Status Validation & Zero-State UI Setup
-**Goal:** Establish secure communication between the Tauri desktop app and the backend, and set up a quiet, distraction-free "zero-noise" visual home state.
+## Phase 1: Service Status Validation, Offline Resilience & Zero-State UI Setup
+**Goal:** Establish secure communication between the Tauri desktop app and the backend, set up a quiet, distraction-free "zero-noise" visual home state, and handle endpoint disconnections gracefully.
 
 ### Task 1.1: Automated Backend Connection Discovery
 * **Files to modify:** `src/main.js`
@@ -18,7 +18,18 @@ This document provides a highly structured, phased implementation roadmap for in
 > 3. Update the bottom status bar: if connected, set `serverDot` background to green and `serverStatus` to "Connected"; if unreachable, set them to yellow/red and "Offline (Check Server)".
 > 4. Ensure CORS header failures are caught gracefully and prompt an intuitive warning in the UI console.
 
-### Task 1.2: Establish "Zero-Noise" State Default
+### Task 1.2: Graceful Offline Degradation Guard
+* **Files to modify:** `src/main.js`, `src/index.html`
+* **Prompt:**
+> **Context:** If the connection to the backend server is lost while a developer is exploring a codebase, we do not want the app to crash or throw unhandled promise exceptions.
+> **Task:**
+> 1. In `src/main.js`, wrap all fetch requests (like graph querying and file-tree loading) in a global error handler.
+> 2. If a network connection error is encountered (e.g. `TypeError: Failed to fetch` or status Code 502/503), trigger an offline state.
+> 3. Display a subtle, non-intrusive warning banner at the top of the viewport: `"Server Disconnected — Viewing Offline Local Cache."`
+> 4. Do not clear the active Cytoscape canvas elements. Allow the developer to continue panning, clicking, and interacting with already-drawn nodes in read-only offline mode.
+> 5. Periodically retry the `/status` ping in the background (every 10 seconds) and auto-dismiss the banner when the backend recovers.
+
+### Task 1.3: Establish "Zero-Noise" State Default
 * **Files to modify:** `src/main.js`, `src/index.html`
 * **Prompt:**
 > **Context:** In alignment with Signal-vs-Noise principles, we want the graph explorer canvas to be completely silent on initial launch, showing zero elements until a file or node is explicitly chosen.
@@ -67,7 +78,7 @@ This document provides a highly structured, phased implementation roadmap for in
 ## Phase 3: Dynamic LLM Settings Handshake & Timeline Travel
 **Goal:** Synchronize saved LLM settings dynamically with the backend processing queue, and render historical repository contexts.
 
-### Task 3.1: Save & Sync Settings Handshake
+### Task 3.1: Save & Sync Settings Handshake (Secure In-Memory Keys)
 * **Files to modify:** `src/main.js`
 * **Prompt:**
 > **Context:** When the developer configures their LLM credentials (Provider, Model Name, API Key) in the Settings panel, the backend needs to receive these settings dynamically so its asynchronous worker can invoke the proper LLM endpoint.
@@ -82,6 +93,7 @@ This document provides a highly structured, phased implementation roadmap for in
 >      "api_key": "<key>"
 >    }
 >    ```
+>    *Architectural Instruction:* Warn the backend in system headers to hold these values *strictly in transient memory cache (RAM)* and never persist them into filesystem configurations or logging databases.
 > 4. Catch failures gracefully; if the handshake fails, alert the user but preserve local storage configurations.
 
 ### Task 3.2: Branches & Commit History Rail
