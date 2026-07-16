@@ -40,15 +40,18 @@ To transform the current mock-heavy desktop app into a high-signal production co
 
 ### A. UI Configuration & Zero-State Layout (Signal Focus)
 * **Remove Mock Defaults:** Purge all mock nodes and edges from `main.js`.
-* **State Simplification:** Replace multi-variable state managers with a single immutable coordinate: `(selectedRepoPath, selectedCommitSHA)`.
+* **State Simplification:** Replace multi-variable state managers with a single immutable coordinate: `(selectedRepoPathOrUrl, selectedCommitSHA)`.
 * **The "Zero-Noise" Canvas:** Ensure that on initial load, the Cytoscape canvas is entirely empty. It should only render nodes upon explicit selection from the file tree or search bar, ensuring a 100% signal ratio.
 
 ### B. Connection & Host Discovery Panel
 * **Automatic Service Detection:** On startup, the UI issues a lightweight fetch to `${baseUrl}/status`.
 * **Container Environment Helper:** If the backend reports running inside Docker, Tauri automatically intercepts file paths to ensure correct shared volume mount mappings (translating host paths to container paths).
 
-### C. Live Ingestion Screen
+### C. Live Ingestion Screen (Local & Remote Git Ingestion)
 * **Progress Tracking:** Replace long-polling loops with a single SSE subscription hook to `/analyze/stream`.
+* **Flexible Ingestion Inputs:** Provide inputs for:
+  1. A local folder path (using Tauri native folder dialogs).
+  2. A remote Git repository URL (HTTPS or SSH) along with an optional Target Branch field.
 * **Metrics Dashboard:** Display live parsing counters: `Files Processed`, `Extracted Symbols`, and `Call Relationships`.
 
 ### D. Git-DAG Navigation Panel
@@ -75,8 +78,9 @@ To support the highly focused desktop client, the backend must expose a few fron
 3. **`GET /repo/branches-and-commits`**
    * **Purpose:** Queries the Git-DAG model and returns all branches and chronological lists of parent/child commit SHAs.
 
-### B. Path Translation Registry
-* Implement a routing helper that automatically maps host directories (passed by Tauri native dialogue) into backend-accessible folder mounts or processes uploaded ZIP payloads natively.
+### B. Path & Remote Cloner Translation Registry
+* **Path Translation:** Implement a routing helper that automatically maps host directories (passed by Tauri native dialogue) into backend-accessible folder mounts or processes uploaded ZIP payloads natively.
+* **Git Clone Workspace Manager:** Expose `/analyze` to accept Git remote URLs, clone them to background workspaces using the `GitRepoHandler`, and clean up transient directories after ingestion completion.
 
 ---
 

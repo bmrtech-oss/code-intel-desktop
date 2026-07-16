@@ -10,6 +10,7 @@ We need to resolve three primary challenges:
 1. **FileSystem isolation:** How a containerized back-end reads local repositories chosen by the Tauri file dialog.
 2. **Visual complexity and scalability:** Rendering dense call graphs without browser freeze.
 3. **Data synchronisation:** Ensuring timeline-travel, branch/commit switching, search, and requirements generation remain consistent and aligned with the backend's topological storage paradigms.
+4. **Remote Repositories Ingestion:** How the UI supports seamless remote Git repository paths (HTTPS/SSH) alongside local workspace files.
 
 This ADR defines the formal architectural blueprint, system and deployment design, and a phased rollout plan.
 
@@ -32,7 +33,7 @@ flowchart TB
 
     UI -->|1. Absolute Local Path / Git URL| Rust
     Rust -->|2. Ingest Trigger POST /analyze| API
-    API -->|3. Queue Job| Redis
+    API -->|3. Queue Job / Git Clone if Remote| Redis
     Redis -->|4. Index / Resolve AST| RQ
     RQ -->|5. Insert Facts| Store
     UI -->|6. Load Graph GET /graph| API
@@ -87,12 +88,14 @@ backend --> db_sql
   * Implement endpoint `GET /api/status` to return platform details, database connection status, and whether the service runs inside Docker.
 
 ### Phase 2: Streaming Ingestion & Real-time Progress (Week 2)
-* **Goal:** Support smooth repository selection and feedback.
+* **Goal:** Support smooth repository selection (both local paths and remote Git URLs) and feedback.
 * **Tauri UI Work:**
   * Bind the "Browse Repo" button to Tauri's native `dialog.open` plugin.
+  * Add a "Clone Remote Repo" form allowing input of Git URLs (HTTPS/SSH) and target branch specifications.
   * Establish an EventSource connection to the backend's stream to display a progress percentage and currently parsed file names.
 * **FastAPI Backend Work:**
   * Create an SSE endpoint `/analyze/stream` that tracks indexing progress from the Redis job queue and transmits the data to the client.
+  * Integrate automatic transient space cloning via `GitRepoHandler` for remote repos.
 
 ### Phase 3: Versioned File Tree & Timeline Travel Panel (Week 3)
 * **Goal:** Allow the user to navigate branches and commits seamlessly.
@@ -127,6 +130,7 @@ backend --> db_sql
 ### Positive
 * **Scalable Render Performance:** By migrating to Level-of-Detail (LOD) node expansions, the app can handle codebases of any size (>50k lines of code) without rendering lag.
 * **Complete Time-Travel:** Leveraging bitemporal version queries enables consistent, snapshot-accurate timeline travel across different commits.
+* **Flexible Sourcing:** Direct support for remote branches allows developers to analyze repositories instantly without pre-cloning them locally.
 * **True Local Privacy:** No code or structural data leaves the user's host machine.
 
 ### Negative

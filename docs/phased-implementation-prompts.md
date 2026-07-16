@@ -29,10 +29,20 @@ This document provides a highly structured, phased implementation roadmap for in
 
 ---
 
-## Phase 2: Native Ingestion & Streaming Progress
-**Goal:** Enable native directory selection via Tauri and replace polling with real-time stream feedback.
+## Phase 2: Native & Remote Ingestion & Streaming Progress
+**Goal:** Enable native directory selection via Tauri as well as remote Git clone targets, and replace polling with real-time stream feedback.
 
-### Task 2.1: Native Directory Handshake (Tauri File Dialog)
+### Task 2.1: Native and Remote Git Selection Input
+* **Files to modify:** `src/index.html`, `src/main.js`
+* **Prompt:**
+> **Context:** The developer should be able to analyze local folders as well as clone remote Git URL pathways (using HTTP or SSH links) into the workspace.
+> **Task:**
+> 1. In `src/index.html`, under the left sidebar "File Tree" section, add an alternative text-input box `#remoteRepoUrlInput` and branch-field `#remoteRepoBranchInput` with a triggering button `#cloneRemoteBtn`.
+> 2. In `src/main.js`, configure a click handler for `#cloneRemoteBtn` that reads the Git URL and target branch.
+> 3. Perform basic validation: if input matches standard Git syntax (HTTPS/SSH), execute a `POST /analyze` request passing `repo_path` (the Git URL) and `branch` (the target branch) to the backend API.
+> 4. Ensure clicking the button enters an active ingestion state.
+
+### Task 2.2: Native Directory Handshake (Tauri File Dialog)
 * **Files to modify:** `src/main.js`
 * **Prompt:**
 > **Context:** Standard web browsers cannot access native system paths. We must use Tauri's native dialog API to browse local directories securely.
@@ -43,7 +53,7 @@ This document provides a highly structured, phased implementation roadmap for in
 > 4. If `dockerMode` is active, perform path translation check or prompt the user if the path is outside the shared Docker mount path.
 > 5. Fire a `POST /analyze` request to the backend carrying the absolute system path.
 
-### Task 2.2: Live Ingestion Stream Display
+### Task 2.3: Live Ingestion Stream Display
 * **Files to modify:** `src/main.js`, `src/index.html`
 * **Prompt:**
 > **Context:** Polling `/status/{job_id}` is inefficient and lacks real-time granularity. We want to subscribe to a streaming endpoint to display real-time parsing progress.
@@ -63,7 +73,7 @@ This document provides a highly structured, phased implementation roadmap for in
 > **Context:** The developer needs a user interface to view and jump between different Git branches and specific historical commits.
 > **Task:**
 > 1. In `src/index.html`, add a select dropdown `#branchSelector` and a scrollable list `#commitTimelineRail` in the left sidebar under the Repository section.
-> 2. In `src/main.js`, after successful ingestion, query `GET /repo/branches-and-commits?repo_path=<path>`.
+> 2. In `src/main.js`, after successful ingestion, query `GET /repo/branches-and-commits?repo_path=<path_or_url>`.
 > 3. Populate `#branchSelector` with returned branches.
 > 4. Populate `#commitTimelineRail` with chronological commit cards showing the commit SHA, author, and timestamp.
 > 5. Bind click listeners to the commit cards: clicking a commit SHA must set `service.currentCommitSHA = sha` and trigger a graph re-load for that snapshot.
@@ -75,7 +85,7 @@ This document provides a highly structured, phased implementation roadmap for in
 > **Task:**
 > 1. When a new commit SHA is selected, send a request to `GET /repo/tree?version=${commitSHA}`.
 > 2. Parse the returned directory JSON object.
-> 3. Rebuild the file tree in the sidebar sidebar element `#fileTree`.
+> 3. Rebuild the file tree in the sidebar element `#fileTree`.
 > 4. Ensure each file tree leaf node includes a dataset property `data-symbols-list` containing the FQN of definitions nested inside that file.
 
 ---
