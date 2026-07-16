@@ -47,37 +47,32 @@ flowchart TB
 ## Proposed Integration & Deployment Topology
 
 ```mermaid
-deploymentNode "Developer Desktop (Host System)" {
-    node "Tauri UI Shell" {
-        component [Cytoscape Canvas] as cy
-        component [File Tree View] as tree
-        component [Timeline Slider] as timeline
-        component [LLM Settings Form] as settings
-    }
+graph TB
+    subgraph "Developer Desktop (Host System)"
+        subgraph "Tauri UI Shell"
+            cy[Cytoscape Canvas Component]
+            tree[File Tree View Sidebar]
+            timeline[Timeline Slider Component]
+            settings[LLM Settings Form]
+        end
 
-    node "Tauri Rust Process" {
-        component [Tauri FS & Shell Plugins] as tauri_core
-    }
+        subgraph "Tauri Rust Process"
+            tauri_core[Tauri FS & Shell Plugins]
+        end
 
-    node "Podman-Compose Stack" {
-        node "codeintel-api (Container)" {
-            component [FastAPI App] as backend
-        }
-        node "codeintel-redis (Container)" {
-            database [Redis Key-Value] as cache_redis
-        }
-        node "codeintel-postgres (Container)" {
-            database [Postgres DB / Timescale] as db_sql
-        }
-    }
-}
+        subgraph "Podman-Compose Stack"
+            backend[codeintel-api FastAPI Container]
+            cache_redis[(codeintel-redis Cache Container)]
+            db_sql[(codeintel-postgres DB Container)]
+        end
+    end
 
-cy --> backend
-tree --> backend
-timeline --> backend
-settings --> backend
-backend --> cache_redis
-backend --> db_sql
+    cy -->|HTTP Requests| backend
+    tree -->|HTTP Requests| backend
+    timeline -->|HTTP Requests| backend
+    settings -->|HTTP Requests| backend
+    backend -->|Session & Cache| cache_redis
+    backend -->|Store Facts| db_sql
 ```
 
 ---
