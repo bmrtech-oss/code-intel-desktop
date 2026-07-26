@@ -120,58 +120,10 @@ console.log('main.js loaded');
         this.graphData = await resp.json();
         return this.graphData;
       } catch (e) {
-        console.warn('Using mock graph data');
+        console.warn('Fallback to empty canvas in offline/error state');
         this.graphData = {
-          nodes: [
-            { id: 'n1', label: 'AuthService', type: 'class' },
-            { id: 'n2', label: 'login', type: 'function' },
-            { id: 'n3', label: 'validateUser', type: 'function' },
-            { id: 'n4', label: 'hashPassword', type: 'function' },
-            { id: 'n5', label: 'UserRepository', type: 'class' },
-            { id: 'n6', label: 'findByEmail', type: 'function' },
-            { id: 'n7', label: 'DatabaseConnection', type: 'class' },
-            { id: 'n8', label: 'query', type: 'function' },
-            { id: 'n9', label: 'Logger', type: 'class' },
-            { id: 'n10', label: 'log', type: 'function' },
-            { id: 'n11', label: 'ConfigService', type: 'class' },
-            { id: 'n12', label: 'getSecret', type: 'function' },
-            { id: 'n13', label: 'TokenService', type: 'class' },
-            { id: 'n14', label: 'generateToken', type: 'function' },
-            { id: 'n15', label: 'verifyToken', type: 'function' },
-            { id: 'n16', label: 'EmailService', type: 'class' },
-            { id: 'n17', label: 'sendWelcome', type: 'function' },
-            { id: 'n18', label: 'User', type: 'class' },
-            { id: 'n19', label: 'Role', type: 'enum' },
-            { id: 'n20', label: 'main', type: 'function' },
-          ],
-          edges: [
-            { source: 'n2', target: 'n3', type: 'calls' },
-            { source: 'n2', target: 'n4', type: 'calls' },
-            { source: 'n2', target: 'n5', type: 'calls' },
-            { source: 'n3', target: 'n6', type: 'calls' },
-            { source: 'n3', target: 'n18', type: 'calls' },
-            { source: 'n6', target: 'n7', type: 'calls' },
-            { source: 'n6', target: 'n8', type: 'calls' },
-            { source: 'n5', target: 'n7', type: 'calls' },
-            { source: 'n1', target: 'n9', type: 'calls' },
-            { source: 'n1', target: 'n11', type: 'calls' },
-            { source: 'n1', target: 'n13', type: 'calls' },
-            { source: 'n14', target: 'n12', type: 'calls' },
-            { source: 'n14', target: 'n10', type: 'calls' },
-            { source: 'n15', target: 'n12', type: 'calls' },
-            { source: 'n16', target: 'n17', type: 'calls' },
-            { source: 'n17', target: 'n10', type: 'calls' },
-            { source: 'n20', target: 'n1', type: 'calls' },
-            { source: 'n20', target: 'n16', type: 'calls' },
-            { source: 'n20', target: 'n14', type: 'calls' },
-            { source: 'n2', target: 'n1', type: 'imports' },
-            { source: 'n3', target: 'n5', type: 'imports' },
-            { source: 'n6', target: 'n7', type: 'imports' },
-            { source: 'n14', target: 'n11', type: 'imports' },
-            { source: 'n17', target: 'n9', type: 'imports' },
-            { source: 'n5', target: 'n18', type: 'imports' },
-            { source: 'n1', target: 'n18', type: 'imports' },
-          ]
+          nodes: [],
+          edges: []
         };
         return this.graphData;
       }
@@ -892,6 +844,15 @@ console.log('main.js loaded');
 
     document.getElementById('nodeCount').textContent = graph.nodes.length + ' nodes';
     document.getElementById('edgeCount').textContent = graph.edges.length + ' edges';
+
+    const splashEl = document.getElementById('graphSplash');
+    if (splashEl) {
+      if (graph.nodes.length === 0) {
+        splashEl.style.display = 'flex';
+      } else {
+        splashEl.style.display = 'none';
+      }
+    }
 
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
     const cyInstance = cytoscape({
