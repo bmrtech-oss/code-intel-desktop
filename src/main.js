@@ -860,7 +860,7 @@ console.log('main.js loaded');
       if (e.target === modal) modal.classList.remove('open');
     });
 
-    saveBtn.addEventListener('click', () => {
+    saveBtn.addEventListener('click', async () => {
       const serverUrl = document.getElementById('settingsServerUrl').value.trim();
       const mcpUrl = document.getElementById('settingsMcpUrl').value.trim();
       const provider = document.getElementById('settingsProvider').value;
@@ -868,6 +868,13 @@ console.log('main.js loaded');
       const customModel = document.getElementById('settingsCustomModel').value.trim();
       let key = document.getElementById('settingsApiKey').value.trim();
 
+      const finalModel = model === 'custom' ? customModel : model;
+      let finalKey = key;
+      if (key === '••••••••') {
+        finalKey = localStorage.getItem('code-intel-llm-key-' + provider) || '';
+      }
+
+      // Locally update first
       if (serverUrl) {
         localStorage.setItem('code-intel-server-url', serverUrl);
         service.baseUrl = serverUrl;
@@ -883,6 +890,32 @@ console.log('main.js loaded');
       }
       if (key && key !== '••••••••') {
         localStorage.setItem('code-intel-llm-key-' + provider, key);
+      }
+
+      // Synchronize dynamically with backend /config/llm
+      try {
+        const resp = await service.safeFetch(`${service.baseUrl}/config/llm`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Transient-Memory-Only': 'true',
+            'Cache-Control': 'no-store',
+            'Pragma': 'no-cache'
+          },
+          body: JSON.stringify({
+            provider: provider,
+            model: finalModel,
+            api_key: finalKey,
+            session_id: "default"
+          })
+        });
+        if (!resp.ok) {
+          throw new Error(`HTTP error ${resp.status}`);
+        }
+        console.log('LLM credentials synchronized successfully with backend.');
+      } catch (err) {
+        console.warn('Backend LLM Settings Sync Handshake failed:', err);
+        alert(`⚠️ Warning: Failed to sync LLM credentials with backend. Local settings have been saved, but dynamic LLM operations on the backend might fail until connection is restored.\n\nError: ${err.message || err}`);
       }
 
       modal.classList.remove('open');
