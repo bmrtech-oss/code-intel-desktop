@@ -423,14 +423,37 @@ console.log('main.js loaded');
               console.log(`Commit card clicked. Selecting SHA: ${sha}`);
               service.currentCommitSHA = sha;
 
-              // Trigger graph load
+              // Trigger graph load and versioned file tree load
               loadGraph();
+              loadVersionedFileTree(sha);
             });
           });
+        }
+
+        // Auto-load matching versioned file tree for latest commit on first load
+        if (commits.length > 0) {
+          const latestSHA = commits[0].sha;
+          service.currentCommitSHA = latestSHA;
+          loadVersionedFileTree(latestSHA);
         }
       }
     } catch (e) {
       console.warn('Failed to load branches and commits:', e);
+    }
+  }
+
+  async function loadVersionedFileTree(commitSHA) {
+    if (!commitSHA || service.demoMode) {
+      return;
+    }
+    console.log(`loadVersionedFileTree: Fetching tree for version ${commitSHA}`);
+    try {
+      const resp = await service.safeFetch(`${service.baseUrl}/repo/tree?version=${encodeURIComponent(commitSHA)}`);
+      const data = await resp.json();
+      currentRepoTree = data;
+      buildFileTree();
+    } catch (e) {
+      console.warn('Failed to load versioned file tree:', e);
     }
   }
 
@@ -712,7 +735,8 @@ console.log('main.js loaded');
           html += renderTree(item.children, depth + 1);
           html += `</div>`;
         } else {
-          html += `<div class="file-tree__item file-tree__item--file" style="padding-left:${indent}px;" data-path="${item.path}"><span class="file-tree__toggle" style="visibility:hidden;">▶</span><span class="file-tree__icon">📄</span><span>${key}</span></div>`;
+          const symbolsAttr = (item.symbols && Array.isArray(item.symbols)) ? item.symbols.join(',') : '';
+          html += `<div class="file-tree__item file-tree__item--file" style="padding-left:${indent}px;" data-path="${item.path || ''}" data-symbols-list="${symbolsAttr}"><span class="file-tree__toggle" style="visibility:hidden;">▶</span><span class="file-tree__icon">📄</span><span>${key}</span></div>`;
         }
       });
       return html;
@@ -771,6 +795,7 @@ console.log('main.js loaded');
       item.addEventListener('click', () => {
         const nodeId = item.dataset.nodeId;
         const path = item.dataset.path;
+        const symbolsList = item.dataset.symbolsList;
         if (nodeId && cy) {
           const el = cy.getElementById(nodeId);
           if (el && el.length) {
@@ -782,7 +807,11 @@ console.log('main.js loaded');
           }
         }
         if (path) {
-          alert('Selected file: ' + path);
+          if (symbolsList) {
+            alert(`Selected file: ${path}\n\nSymbols defined here:\n${symbolsList.split(',').join('\n')}`);
+          } else {
+            alert('Selected file: ' + path);
+          }
         }
       });
     });
