@@ -1205,6 +1205,107 @@ console.log('main.js loaded');
         showEmptyDetails();
       }
     });
+
+    cy.on('dbltap', 'node', async function(evt) {
+      const node = evt.target;
+      if (node.data('type') !== 'file') return;
+
+      const parentId = node.id();
+      const path = parentId.startsWith('file:') ? parentId.substring(5) : parentId;
+      const commitSHA = service.currentCommitSHA || 'latest';
+
+      console.log(`Double-clicked file node: ${path}. Expanding symbols...`);
+
+      try {
+        const resp = await service.safeFetch(`${service.baseUrl}/query`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            rule: 'get_symbols',
+            commit_sha: commitSHA,
+            file_path: path
+          })
+        });
+        const data = await resp.json();
+        const symbols = data.result || [];
+
+        console.log(`Found ${symbols.length} symbols in ${path}`);
+
+        if (symbols.length === 0) {
+          alert(`No symbols found in ${path}`);
+          return;
+        }
+
+        // Add symbol nodes as children
+        symbols.forEach(symbol => {
+          const symId = symbol.id || symbol.fqn;
+          if (!cy.getElementById(symId).length) {
+            cy.add({
+              group: 'nodes',
+              data: {
+                id: symId,
+                label: symbol.name || symId.split('.').pop(),
+                type: symbol.kind || 'symbol',
+                name: symbol.name || symId.split('.').pop(),
+                parent: parentId
+              },
+              style: {
+                'background-color': `var(--node-${symbol.kind || 'symbol'})`,
+                'border-color': `var(--node-${symbol.kind || 'symbol'})`
+              }
+            });
+
+            nodeMap[symId] = {
+              id: symId,
+              label: symbol.name || symId.split('.').pop(),
+              type: symbol.kind || 'symbol',
+              file: symbol.file || path
+            };
+          }
+        });
+
+        // Query detailed graph to find calls and imports dependencies
+        const graphResp = await service.safeFetch(`${service.baseUrl}/graph?version=${encodeURIComponent(commitSHA)}&level=all`);
+        const fullGraph = await graphResp.json();
+
+        // Add edges connecting any of the visible symbol nodes
+        let edgesAdded = 0;
+        fullGraph.edges.forEach(edge => {
+          const edgeId = edge.source + '-' + edge.target;
+          if (cy.getElementById(edge.source).length && cy.getElementById(edge.target).length && !cy.getElementById(edgeId).length) {
+            cy.add({
+              group: 'edges',
+              data: {
+                id: edgeId,
+                source: edge.source,
+                target: edge.target,
+                type: edge.type || 'calls'
+              }
+            });
+            edgesAdded++;
+          }
+        });
+
+        console.log(`Added ${edgesAdded} dependencies edges.`);
+
+        // Re-run the layout to place the new compound child nodes and edges beautifully
+        cy.layout({
+          name: 'concentric',
+          fit: true,
+          padding: 40,
+          avoidOverlap: true,
+          nodeDimensionsIncludeLabels: true
+        }).run();
+
+        // Update statistics counters
+        document.getElementById('nodeCount').textContent = cy.nodes().length + ' nodes';
+        document.getElementById('edgeCount').textContent = cy.edges().length + ' edges';
+
+      } catch (err) {
+        console.error('Failed to expand symbols:', err);
+        alert('Failed to expand symbols: ' + err.message);
+      }
+    });
   }
 
   // === Load Graph ===
