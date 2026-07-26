@@ -263,6 +263,8 @@ console.log('main.js loaded');
       sourceInfo.textContent = 'Source: Demo project';
     } else if (currentRepoTree) {
       sourceInfo.textContent = 'Source: Local repository';
+    } else if (currentRepoSource) {
+      sourceInfo.textContent = `Source: ${currentRepoSource}`;
     } else {
       sourceInfo.textContent = `Source: ${service.baseUrl}`;
     }
@@ -1167,8 +1169,85 @@ console.log('main.js loaded');
     setupGraphControls();
     setupSettingsModal();
     setupWorkspace();
-    document.getElementById('browseRepoBtn').addEventListener('click', () => {
-      document.getElementById('repoFileInput').click();
+    document.getElementById('browseRepoBtn').addEventListener('click', async () => {
+      const isTauri = typeof window !== 'undefined' && window.TAURI && window.TAURI.dialog;
+      const dockerMode = localStorage.getItem('dockerMode') === 'true';
+
+      let absolutePath = null;
+
+      if (isTauri) {
+        try {
+          // Open Tauri's native directory picker dialog
+          const selectedPath = await window.TAURI.dialog.open({
+            directory: true,
+            multiple: false
+          });
+
+          if (selectedPath) {
+            // Under single select directory: true, selectedPath will be a string
+            absolutePath = Array.isArray(selectedPath) ? selectedPath[0] : selectedPath;
+          }
+        } catch (e) {
+          console.error('Tauri native dialog failed:', e);
+          alert('Failed to open native dialog: ' + e.message);
+          return;
+        }
+      } else {
+        // Fallback for standard browsers in development / testing environments
+        const prompted = prompt('Browser environment detected (Non-Tauri). Enter the absolute system path to analyze:');
+        if (prompted && prompted.trim()) {
+          absolutePath = prompted.trim();
+        }
+      }
+
+      if (!absolutePath) {
+        return;
+      }
+
+      // If dockerMode is active, check the path translation or prompt user
+      if (dockerMode) {
+        // Shared Docker mount path rule (typically /shared or similar)
+        const isShared = absolutePath.startsWith('/shared') || absolutePath.startsWith('\\shared');
+        if (!isShared) {
+          const confirmAnalysis = confirm(
+            `⚠️ [Docker Mode Active] The selected path "${absolutePath}" might not be accessible inside the container.\n\nBackend is running inside a Docker container. Ensure this directory is mounted/accessible (e.g. under "/shared").\n\nDo you still want to proceed?`
+          );
+          if (!confirmAnalysis) {
+            return;
+          }
+        }
+      }
+
+      // Fire a POST /analyze request to backend carrying the absolute path
+      const browseBtn = document.getElementById('browseRepoBtn');
+      browseBtn.disabled = true;
+      const originalText = browseBtn.textContent;
+      browseBtn.textContent = 'Analyzing...';
+
+      try {
+        const resp = await service.safeFetch(`${service.baseUrl}/analyze`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ repo_path: absolutePath })
+        });
+
+        const data = await resp.json();
+        console.log('Absolute path analysis triggered successfully:', data);
+        alert(`Analysis triggered successfully!\nSelected path: ${absolutePath}`);
+
+        currentRepoTree = null;
+        currentRepoSource = absolutePath;
+        service.demoMode = false;
+        service.graphData = null; // Clear old local graph
+        updateRepoSourceInfo();
+        loadGraph();
+      } catch (e) {
+        console.error('Failed to analyze absolute path:', e);
+        alert('Failed to analyze path. Error: ' + e.message);
+      } finally {
+        browseBtn.disabled = false;
+        browseBtn.textContent = originalText;
+      }
     });
     document.getElementById('demoProjectBtn').addEventListener('click', () => {
       selectDemoProject();
