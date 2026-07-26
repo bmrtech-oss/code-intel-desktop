@@ -450,6 +450,27 @@ body { font-family: var(--font-family); background: var(--theme-bg); color: var(
 }
 
 /* ============================================================
+   OFFLINE WARNING BANNER
+   ============================================================ */
+.offline-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  background: var(--theme-warning);
+  color: #FFFFFF;
+  font-size: 12px;
+  font-weight: 500;
+  padding: var(--space-xs) var(--space-md);
+  height: 28px;
+  min-height: 28px;
+  width: 100%;
+  z-index: 1001;
+  text-align: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* ============================================================
    REQUIREMENTS WORKSPACE MODAL STYLES
    ============================================================ */
 .workspace-modal {

@@ -51,10 +51,33 @@ console.log('main.js loaded');
       this.demoMode = false;
     }
 
+    async safeFetch(url, options = {}) {
+      try {
+        const resp = await fetch(url, options);
+        if (!resp.ok) {
+          if (resp.status === 502 || resp.status === 503) {
+            if (url.startsWith(this.baseUrl)) {
+              triggerOfflineMode(true);
+            }
+          }
+          throw new Error(`Fetch failed with status ${resp.status}`);
+        }
+        if (url.startsWith(this.baseUrl)) {
+          triggerOfflineMode(false);
+        }
+        return resp;
+      } catch (e) {
+        const isNetworkErr = e instanceof TypeError || /Failed to fetch|NetworkError|CORS|TypeError/i.test(e.message || String(e));
+        if (isNetworkErr && url.startsWith(this.baseUrl)) {
+          triggerOfflineMode(true);
+        }
+        throw e;
+      }
+    }
+
     async connect() {
       try {
-        const resp = await fetch(`${this.baseUrl}/api/status`, { signal: AbortSignal.timeout(3000) });
-        if (!resp.ok) throw new Error('Server unreachable');
+        const resp = await this.safeFetch(`${this.baseUrl}/api/status`, { signal: AbortSignal.timeout(3000) });
         const data = await resp.json();
         this.connected = true;
         this.connectError = null;
@@ -93,8 +116,7 @@ console.log('main.js loaded');
       }
       if (this.graphData) return this.graphData;
       try {
-        const resp = await fetch(`${this.baseUrl}/api/graph`);
-        if (!resp.ok) throw new Error('Graph fetch failed');
+        const resp = await this.safeFetch(`${this.baseUrl}/api/graph`);
         this.graphData = await resp.json();
         return this.graphData;
       } catch (e) {
@@ -158,12 +180,11 @@ console.log('main.js loaded');
     // === LLM Requirements Generation ===
     async generateRequirements(nodeIds, context, provider, model) {
       try {
-        const resp = await fetch(`${this.baseUrl}/api/llm/generate`, {
+        const resp = await this.safeFetch(`${this.baseUrl}/api/llm/generate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ nodeIds, context, provider, model })
         });
-        if (!resp.ok) throw new Error('LLM generation failed');
         return await resp.json();
       } catch (e) {
         console.warn('LLM generation fallback to mock', e.message);
@@ -292,6 +313,24 @@ console.log('main.js loaded');
       sourceInfo.textContent = 'Source: Local repository';
     } else {
       sourceInfo.textContent = `Source: ${service.baseUrl}`;
+    }
+  }
+
+  function triggerOfflineMode(isOffline) {
+    const banner = document.getElementById('offlineBanner');
+    const statusEl = document.getElementById('serverStatus');
+    const dotEl = document.getElementById('serverDot');
+
+    if (isOffline) {
+      service.connected = false;
+      if (banner) banner.style.display = 'flex';
+      if (statusEl) statusEl.textContent = 'Offline (Check Server)';
+      if (dotEl) dotEl.style.background = 'var(--theme-danger)';
+    } else {
+      service.connected = true;
+      if (banner) banner.style.display = 'none';
+      if (statusEl) statusEl.textContent = 'Connected';
+      if (dotEl) dotEl.style.background = 'var(--theme-success)';
     }
   }
 
@@ -841,6 +880,12 @@ console.log('main.js loaded');
       console.warn('Connection error:', e);
     }
 
+    // Do not clear the active Cytoscape canvas elements. Allow the developer to continue in offline mode.
+    if (cy && !service.connected) {
+      console.log('Skipping Cytoscape re-render because app is offline and graph is already active.');
+      return;
+    }
+
     const graph = await service.getGraph();
     nodeMap = {};
     graph.nodes.forEach(n => { nodeMap[n.id] = n; });
@@ -1178,6 +1223,32 @@ console.log('main.js loaded');
     enableSplitter();
     enableRightSplitter();
     updateRepoSourceInfo();
+
+    // Periodic health check of FastAPI backend (every 10 seconds)
+    setInterval(async () => {
+      try {
+        const resp = await fetch(`${service.baseUrl}/api/status`, { signal: AbortSignal.timeout(3000) });
+        if (resp.ok) {
+          const data = await resp.json();
+          // If recovered, dismiss the banner and update the status bar
+          triggerOfflineMode(false);
+
+          // Keep dockerMode in sync
+          if (data && (data.is_docker === true || data.docker === true || data.dockerMode === true || data.docker_mode === true || data.environment === 'docker')) {
+            localStorage.setItem('dockerMode', 'true');
+          } else {
+            localStorage.setItem('dockerMode', 'false');
+          }
+        } else {
+          if (resp.status === 502 || resp.status === 503) {
+            triggerOfflineMode(true);
+          }
+        }
+      } catch (e) {
+        // Remain or transition to offline
+        triggerOfflineMode(true);
+      }
+    }, 10000);
 
     // Periodic health check (every 30 seconds)
     setInterval(() => {
