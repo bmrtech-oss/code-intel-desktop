@@ -481,6 +481,12 @@ body { font-family: var(--font-family); background: var(--theme-bg); color: var(
   margin-top: var(--space-xs);
 }
 
+.commit-card:hover {
+  border-color: var(--theme-primary) !important;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
 /* ============================================================
    OFFLINE WARNING BANNER
    ============================================================ */

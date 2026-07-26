@@ -49,6 +49,7 @@ console.log('main.js loaded');
       this.graphData = null;
       this.mcpTools = [];
       this.demoMode = false;
+      this.currentCommitSHA = null;
     }
 
     async safeFetch(url, options = {}) {
@@ -114,18 +115,30 @@ console.log('main.js loaded');
         this.graphData = this.getDemoGraphData();
         return this.graphData;
       }
-      if (this.graphData) return this.graphData;
+      if (this.graphData && !this.currentCommitSHA) return this.graphData;
       try {
-        const resp = await this.safeFetch(`${this.baseUrl}/api/graph`);
+        let url = `${this.baseUrl}/graph`;
+        if (this.currentCommitSHA) {
+          url += `?version=${encodeURIComponent(this.currentCommitSHA)}`;
+        } else {
+          url += `?version=latest`;
+        }
+        const resp = await this.safeFetch(url);
         this.graphData = await resp.json();
         return this.graphData;
       } catch (e) {
-        console.warn('Fallback to empty canvas in offline/error state');
-        this.graphData = {
-          nodes: [],
-          edges: []
-        };
-        return this.graphData;
+        try {
+          const resp = await this.safeFetch(`${this.baseUrl}/api/graph`);
+          this.graphData = await resp.json();
+          return this.graphData;
+        } catch (err) {
+          console.warn('Fallback to empty canvas in offline/error state', err);
+          this.graphData = {
+            nodes: [],
+            edges: []
+          };
+          return this.graphData;
+        }
       }
     }
 
@@ -336,6 +349,7 @@ console.log('main.js loaded');
             if (progressContainer) progressContainer.style.display = 'none';
             // Trigger workspace loading cycle
             loadGraph();
+            loadBranchesAndCommits();
           }, 1500);
         }
       } catch (err) {
@@ -352,6 +366,72 @@ console.log('main.js loaded');
         console.log('SSE connection closed or connecting. Active status:', es.readyState);
       }
     };
+  }
+
+  async function loadBranchesAndCommits() {
+    if (!currentRepoSource || service.demoMode) {
+      return;
+    }
+
+    const branchSelector = document.getElementById('branchSelector');
+    const commitTimelineRail = document.getElementById('commitTimelineRail');
+
+    console.log(`loadBranchesAndCommits: Fetching for ${currentRepoSource}`);
+
+    try {
+      const resp = await service.safeFetch(`${service.baseUrl}/repo/branches-and-commits?repo_path=${encodeURIComponent(currentRepoSource)}`);
+      const data = await resp.json();
+      const branches = data.branches || [];
+      const commits = data.commits || [];
+
+      // 1. Populate branch dropdown
+      if (branchSelector) {
+        branchSelector.innerHTML = branches.map(b => `<option value="${b}">${b}</option>`).join('');
+      }
+
+      // 2. Populate commit timeline rail
+      if (commitTimelineRail) {
+        if (commits.length === 0) {
+          commitTimelineRail.innerHTML = `<div style="padding: var(--space-sm); text-align: center; color: var(--theme-text-dim); font-size: 11px;">No commits found</div>`;
+        } else {
+          commitTimelineRail.innerHTML = commits.map(c => {
+            const shortSha = c.sha ? c.sha.substring(0, 7) : '—';
+            const author = c.author || 'Unknown';
+            const dateStr = c.date ? new Date(c.date).toLocaleString() : '—';
+            return `
+              <div class="commit-card" data-sha="${c.sha}" style="padding: var(--space-sm); border: 1px solid var(--theme-border); border-radius: var(--radius-sm); background: var(--theme-surface-elevated); cursor: pointer; transition: all 150ms ease; display: flex; flex-direction: column; gap: 2px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; pointer-events: none;">
+                  <span style="font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--theme-primary);">${shortSha}</span>
+                  <span style="font-size: 10px; color: var(--theme-text-dim);">${dateStr}</span>
+                </div>
+                <div style="font-size: 11px; font-weight: 500; color: var(--theme-text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap; pointer-events: none;">by ${author}</div>
+              </div>
+            `;
+          }).join('');
+
+          // 3. Bind click listeners to commit cards
+          commitTimelineRail.querySelectorAll('.commit-card').forEach(card => {
+            card.addEventListener('click', () => {
+              commitTimelineRail.querySelectorAll('.commit-card').forEach(cc => {
+                cc.style.borderColor = 'var(--theme-border)';
+                cc.style.background = 'var(--theme-surface-elevated)';
+              });
+              card.style.borderColor = 'var(--theme-primary)';
+              card.style.background = 'var(--theme-surface)';
+
+              const sha = card.dataset.sha;
+              console.log(`Commit card clicked. Selecting SHA: ${sha}`);
+              service.currentCommitSHA = sha;
+
+              // Trigger graph load
+              loadGraph();
+            });
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load branches and commits:', e);
+    }
   }
 
   function updateRepoSourceInfo() {
@@ -1376,6 +1456,7 @@ console.log('main.js loaded');
           subscribeToIngestionStream(data.job_id);
         } else {
           loadGraph();
+          loadBranchesAndCommits();
         }
       } catch (e) {
         console.error('Failed to analyze absolute path:', e);
@@ -1428,10 +1509,17 @@ console.log('main.js loaded');
         console.log('Ingestion triggered successfully:', data);
         alert(`Ingestion triggered successfully! Job ID: ${data.job_id || 'started'}`);
 
+        currentRepoTree = null;
+        currentRepoSource = url;
+        service.demoMode = false;
+        service.graphData = null; // Clear old local graph
+        updateRepoSourceInfo();
+
         if (data.job_id) {
           subscribeToIngestionStream(data.job_id);
         } else {
           loadGraph();
+          loadBranchesAndCommits();
         }
       } catch (e) {
         console.error('Remote ingestion failed:', e);
@@ -1447,6 +1535,15 @@ console.log('main.js loaded');
         selectRepoFiles(files);
       }
     });
+
+    const branchSelector = document.getElementById('branchSelector');
+    if (branchSelector) {
+      branchSelector.addEventListener('change', () => {
+        const val = branchSelector.value;
+        console.log(`Branch changed to: ${val}`);
+      });
+    }
+
     loadGraph();
     refreshMCPTools(); // Also refresh MCP tools on load
     enableSplitter();
