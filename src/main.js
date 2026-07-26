@@ -1173,6 +1173,53 @@ console.log('main.js loaded');
     document.getElementById('demoProjectBtn').addEventListener('click', () => {
       selectDemoProject();
     });
+    document.getElementById('cloneRemoteBtn').addEventListener('click', async () => {
+      const urlInput = document.getElementById('remoteRepoUrlInput');
+      const branchInput = document.getElementById('remoteRepoBranchInput');
+      const cloneBtn = document.getElementById('cloneRemoteBtn');
+
+      const url = urlInput.value.trim();
+      const branch = branchInput.value.trim();
+
+      if (!url) {
+        alert('Please enter a remote Git URL.');
+        return;
+      }
+
+      // Basic Git URL syntax validation (matches https, http, git, or ssh pathways)
+      const gitRegex = /^(https?:\/\/|git@|ssh:\/\/|git:\/\/|git\+ssh:\/\/)[a-zA-Z0-9_\-\.\~\/:]+(?:\.git)?\/?$/;
+      if (!gitRegex.test(url)) {
+        alert('Invalid Git URL format. Please enter a valid HTTP, HTTPS, or SSH Git pathway.');
+        return;
+      }
+
+      // Enter active ingestion state
+      cloneBtn.disabled = true;
+      cloneBtn.textContent = 'Ingesting...';
+
+      try {
+        const payload = { repo_path: url };
+        if (branch) {
+          payload.branch = branch;
+        }
+
+        const resp = await service.safeFetch(`${service.baseUrl}/analyze`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await resp.json();
+        console.log('Ingestion triggered successfully:', data);
+        alert(`Ingestion triggered successfully! Job ID: ${data.job_id || 'started'}`);
+      } catch (e) {
+        console.error('Remote ingestion failed:', e);
+        alert('Failed to trigger remote ingestion. Error: ' + e.message);
+      } finally {
+        cloneBtn.disabled = false;
+        cloneBtn.textContent = 'Clone & Ingest';
+      }
+    });
     document.getElementById('repoFileInput').addEventListener('change', (event) => {
       const files = event.target.files;
       if (files && files.length > 0) {

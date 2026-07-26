@@ -503,6 +503,17 @@ body { font-family: var(--font-family); background: var(--theme-bg); color: var(
 }
 
 /* ============================================================
+   SIDEBAR COMPONENT STYLES
+   ============================================================ */
+.sidebar__input {
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+.sidebar__input:focus {
+  border-color: var(--theme-primary) !important;
+  box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2) !important;
+}
+
+/* ============================================================
    REQUIREMENTS WORKSPACE MODAL STYLES
    ============================================================ */
 .workspace-modal {
