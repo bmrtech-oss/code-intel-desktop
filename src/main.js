@@ -741,6 +741,7 @@ console.log('main.js loaded');
       });
 
       cy = cyInstance;
+      window.cy = cyInstance;
 
       setupCyEvents();
 
@@ -965,9 +966,9 @@ console.log('main.js loaded');
     let html = `<div style="display:flex;flex-direction:column;gap:var(--space-xs);">`;
     selectedNodeIds.forEach(id => {
       const info = nodeMap[id];
-      if (info) {
-        html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:var(--space-xs) var(--space-sm);background:var(--theme-surface);border-radius:var(--radius-sm);border:1px solid var(--theme-border);"><span class="mono" style="font-size:12px;">${info.label}</span><span style="font-size:10px; color:var(--theme-text-dim);">${info.type}</span></div>`;
-      }
+      const label = info ? info.label : id;
+      const type = info ? info.type : 'symbol';
+      html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:var(--space-xs) var(--space-sm);background:var(--theme-surface);border-radius:var(--radius-sm);border:1px solid var(--theme-border);"><span class="mono" style="font-size:12px;">${label}</span><span style="font-size:10px; color:var(--theme-text-dim);">${type}</span></div>`;
     });
     html += `</div>`;
     list.innerHTML = html;
@@ -1010,33 +1011,101 @@ console.log('main.js loaded');
     status.textContent = 'Generating requirements using ' + model + '...';
 
     try {
-      const provider = localStorage.getItem('code-intel-llm-provider') || 'openai';
-      const result = await service.generateRequirements(selectedNodeIds, document.getElementById('reqPrompt').value, provider, model);
-      output.textContent = result.markdown;
-      let rows = '';
-      (result.traceability || []).forEach(row => {
-        rows += `<tr><td><strong>${row.id}</strong></td><td>${row.desc}</td><td><span class="node-ref" data-node-id="${row.node}">${row.node}</span></td></tr>`;
-      });
-      if (!rows) rows = `<tr><td colspan="3" style="text-align:center; color:var(--theme-text-dim);">No traceability available.</td></tr>`;
-      matrixBody.innerHTML = rows;
+      const commitSHA = service.currentCommitSHA || 'latest';
       
-      matrixBody.querySelectorAll('.node-ref').forEach(el => {
-        el.addEventListener('click', function() {
-          const nodeId = this.dataset.nodeId;
-          if (nodeId && cy) {
-            const node = cy.getElementById(nodeId);
-            if (node && node.length) {
-              cy.animate({ center: { eles: node }, zoom: 2.5, duration: 400 });
-              cy.elements().unselect();
-              node.select();
-              closeRequirementsWorkspace();
+      // POST request to stream requirements chunk by chunk
+      const response = await fetch(`${service.baseUrl}/requirements/stream?version=${encodeURIComponent(commitSHA)}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          symbol_ids: selectedNodeIds
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      output.textContent = ''; // Clear initial instruction text
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop(); // Keep any partial line
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith('data:')) {
+            const dataStr = trimmed.substring(5).trim();
+            if (!dataStr) continue;
+
+            try {
+              const parsed = JSON.parse(dataStr);
+
+              if (parsed.token) {
+                // Render incoming markdown chunks inside #reqOutput in real-time
+                output.textContent += parsed.token;
+                output.scrollTop = output.scrollHeight;
+              }
+
+              if (parsed.done === true) {
+                // On stream completion, display grounded verification scores and populate Traceability Matrix table
+                const isVerified = parsed.is_verified !== undefined ? parsed.is_verified : 'N/A';
+                const confidence = parsed.confidence !== undefined ? parsed.confidence : 'N/A';
+
+                status.textContent = `✅ Complete! Verification status: ${isVerified} (Confidence Score: ${confidence})`;
+
+                const reqJson = parsed.req_json || {};
+                const tasks = reqJson.tasks || [];
+                let rows = '';
+
+                tasks.forEach((task, idx) => {
+                  const reqId = `REQ-${String(idx+1).padStart(3,'0')}`;
+                  const traceList = task.traceability || [];
+                  rows += `<tr>
+                    <td><strong>${reqId}</strong></td>
+                    <td>${task.text || 'Requirement details'}</td>
+                    <td>${traceList.map(t => `<span class="node-ref" data-node-id="${t}" style="color:var(--theme-primary); cursor:pointer; font-family:var(--font-mono);">${t}</span>`).join(', ')}</td>
+                  </tr>`;
+                });
+
+                if (!rows) {
+                  rows = `<tr><td colspan="3" style="text-align:center; color:var(--theme-text-dim);">No traceability available.</td></tr>`;
+                }
+                matrixBody.innerHTML = rows;
+
+                // Re-bind click listeners on the node references
+                matrixBody.querySelectorAll('.node-ref').forEach(el => {
+                  el.addEventListener('click', function() {
+                    const nodeId = this.dataset.nodeId;
+                    if (nodeId && cy) {
+                      const node = cy.getElementById(nodeId);
+                      if (node && node.length) {
+                        cy.animate({ center: { eles: node }, zoom: 2.5, duration: 400 });
+                        cy.elements().unselect();
+                        node.select();
+                        closeRequirementsWorkspace();
+                      }
+                    }
+                  });
+                });
+
+                window._generatedReqDoc = output.textContent;
+              }
+            } catch (err) {
+              console.warn("Failed to parse SSE JSON chunk:", err);
             }
           }
-        });
-      });
-      
-      status.textContent = '✅ Requirements generated successfully!';
-      window._generatedReqDoc = result.markdown;
+        }
+      }
     } catch (e) {
       status.textContent = '❌ Error: ' + e.message;
     } finally {
@@ -1381,6 +1450,7 @@ console.log('main.js loaded');
     });
 
     cy = cyInstance;
+    window.cy = cyInstance;
 
     setupCyEvents();
 
