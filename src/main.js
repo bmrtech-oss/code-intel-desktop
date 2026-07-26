@@ -652,6 +652,112 @@ console.log('main.js loaded');
     });
   }
 
+  // === Load File Graph ===
+  async function loadFileGraph(commitSHA) {
+    const sha = commitSHA || service.currentCommitSHA || 'latest';
+    console.log(`loadFileGraph: Fetching file-level graph for version ${sha}`);
+
+    const statusEl = document.getElementById('serverStatus');
+    const dotEl = document.getElementById('serverDot');
+
+    try {
+      const status = await service.connect();
+      if (service.connected) {
+        statusEl.textContent = 'Connected';
+        dotEl.style.background = 'var(--theme-success)';
+      } else {
+        statusEl.textContent = 'Offline (Check Server)';
+        dotEl.style.background = 'var(--theme-danger)';
+      }
+    } catch (e) {
+      statusEl.textContent = 'Offline (Check Server)';
+      dotEl.style.background = 'var(--theme-danger)';
+      console.warn('Connection error:', e);
+    }
+
+    if (cy && !service.connected) {
+      console.log('Skipping Cytoscape re-render because app is offline and graph is already active.');
+      return;
+    }
+
+    try {
+      let url = `${service.baseUrl}/graph?version=${encodeURIComponent(sha)}&level=file`;
+      const resp = await service.safeFetch(url);
+      const graph = await resp.json();
+
+      // Ensure we only render FileNodes (representing directories and code files)
+      const fileNodes = graph.nodes.filter(n => n.type === 'file' || n.type === 'directory' || n.type === 'folder');
+      const fileNodeIds = new Set(fileNodes.map(n => n.id));
+      const fileEdges = graph.edges.filter(e => fileNodeIds.has(e.source) && fileNodeIds.has(e.target));
+
+      nodeMap = {};
+      fileNodes.forEach(n => { nodeMap[n.id] = n; });
+
+      document.getElementById('nodeCount').textContent = fileNodes.length + ' nodes';
+      document.getElementById('edgeCount').textContent = fileEdges.length + ' edges';
+
+      const splashEl = document.getElementById('graphSplash');
+      if (splashEl) {
+        if (fileNodes.length === 0) {
+          splashEl.style.display = 'flex';
+        } else {
+          splashEl.style.display = 'none';
+        }
+      }
+
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      const cyInstance = cytoscape({
+        container: document.getElementById('cy'),
+        elements: {
+          nodes: fileNodes.map(n => ({
+            data: { id: n.id, label: n.label, type: n.type, name: n.label },
+            style: { 'background-color': `var(--node-${n.type})`, 'border-color': `var(--node-${n.type})` }
+          })),
+          edges: fileEdges.map(e => ({ data: { ...e, id: e.source + '-' + e.target } }))
+        },
+        style: [
+          { selector: 'node', style: { 'width': '36px', 'height': '36px', 'border-width': 2, 'border-color': 'data(border-color)', 'border-opacity': 0.8, 'label': 'data(label)', 'font-size': '11px', 'font-family': "'Inter', -apple-system, sans-serif", 'color': isDark ? '#F0F6FC' : '#1F2328', 'text-valign': 'bottom', 'text-halign': 'center', 'text-outline-width': 2, 'text-outline-color': isDark ? '#0D1117' : '#FFFFFF', 'text-outline-opacity': 1, 'text-margin-y': 6, 'text-wrap': 'wrap', 'text-max-width': '60px' } },
+          { selector: 'node:selected', style: { 'border-width': 4, 'border-color': 'var(--theme-primary)', 'border-opacity': 1, 'width': '44px', 'height': '44px', 'background-opacity': 0.9 } },
+          { selector: 'edge', style: { 'width': 2, 'line-color': 'var(--edge-call)', 'target-arrow-color': 'var(--edge-call)', 'target-arrow-shape': 'triangle', 'source-arrow-shape': 'none', 'arrow-scale': 1.2, 'curve-style': 'bezier', 'label': 'data(type)', 'font-size': '9px', 'font-family': "'Inter', sans-serif", 'color': isDark ? '#8B949E' : '#656D76', 'text-outline-width': 1, 'text-outline-color': isDark ? '#0D1117' : '#FFFFFF', 'text-margin-y': -6, 'control-point-distance': 20, 'control-point-weight': 0.5 } },
+          { selector: 'edge[type="imports"]', style: { 'line-style': 'dashed', 'line-color': 'var(--edge-import)', 'target-arrow-color': 'var(--edge-import)', 'width': 1.5 } }
+        ],
+        layout: {
+          name: 'concentric',
+          fit: true,
+          padding: 40,
+          startAngle: 3/2 * Math.PI,
+          clockwise: true,
+          equidistant: false,
+          minNodeSpacing: 60,
+          avoidOverlap: true,
+          nodeDimensionsIncludeLabels: true
+        },
+        userZoomingEnabled: true,
+        userPanningEnabled: true,
+        boxSelectionEnabled: true,
+        selectionType: 'additive',
+        minZoom: 0.3,
+        maxZoom: 4,
+      });
+
+      cy = cyInstance;
+
+      setupCyEvents();
+
+      buildFileTree();
+      showEmptyDetails();
+      updateRepoSourceInfo();
+      console.log('✅ File graph loaded with', fileNodes.length, 'nodes and', fileEdges.length, 'edges.');
+    } catch (err) {
+      console.warn('Failed to load file graph, falling back to empty graph:', err);
+      nodeMap = {};
+      document.getElementById('nodeCount').textContent = '0 nodes';
+      document.getElementById('edgeCount').textContent = '0 edges';
+      const splashEl = document.getElementById('graphSplash');
+      if (splashEl) splashEl.style.display = 'flex';
+    }
+  }
+
   // === Filters ===
   function setupFilters() {
     const chips = document.querySelectorAll('.filter-chip');
@@ -1054,8 +1160,60 @@ console.log('main.js loaded');
     });
   }
 
+  // === Setup Cytoscape Events ===
+  function setupCyEvents() {
+    if (!cy) return;
+
+    cy.on('select', 'node', function(evt) {
+      const node = evt.target;
+      if (!selectedNodeIds.includes(node.id())) {
+        selectedNodeIds.push(node.id());
+      }
+      updateWorkspaceScope();
+      if (selectedNodeIds.length === 1) {
+        showNodeDetails(node);
+      } else {
+        document.getElementById('detailName').textContent = selectedNodeIds.length + ' nodes selected';
+        document.getElementById('detailType').textContent = 'Multi-select mode';
+        document.getElementById('emptyState').style.display = 'none';
+        document.getElementById('detailsContent').style.display = 'block';
+        document.getElementById('impactList').innerHTML = `<div class="details-panel__impact-item"><span class="mono">${selectedNodeIds.length} nodes in scope</span></div>`;
+        document.getElementById('callPaths').innerHTML = `<span class="mono">Use the Requirements Workspace to generate documentation for this selection.</span>`;
+      }
+    });
+
+    cy.on('unselect', 'node', function(evt) {
+      const node = evt.target;
+      const idx = selectedNodeIds.indexOf(node.id());
+      if (idx > -1) {
+        selectedNodeIds.splice(idx, 1);
+      }
+      updateWorkspaceScope();
+      if (selectedNodeIds.length === 0) {
+        showEmptyDetails();
+      } else if (selectedNodeIds.length === 1) {
+        const el = cy.getElementById(selectedNodeIds[0]);
+        if (el && el.length) showNodeDetails(el);
+      }
+    });
+
+    cy.on('tap', function(evt) {
+      if (evt.target === cy) {
+        cy.elements().unselect();
+        selectedNodeIds = [];
+        updateWorkspaceScope();
+        showEmptyDetails();
+      }
+    });
+  }
+
   // === Load Graph ===
   async function loadGraph() {
+    if (!service.demoMode) {
+      await loadFileGraph(service.currentCommitSHA);
+      return;
+    }
+
     const statusEl = document.getElementById('serverStatus');
     const dotEl = document.getElementById('serverDot');
 
@@ -1123,47 +1281,7 @@ console.log('main.js loaded');
 
     cy = cyInstance;
 
-    cy.on('select', 'node', function(evt) {
-      const node = evt.target;
-      if (!selectedNodeIds.includes(node.id())) {
-        selectedNodeIds.push(node.id());
-      }
-      updateWorkspaceScope();
-      if (selectedNodeIds.length === 1) {
-        showNodeDetails(node);
-      } else {
-        document.getElementById('detailName').textContent = selectedNodeIds.length + ' nodes selected';
-        document.getElementById('detailType').textContent = 'Multi-select mode';
-        document.getElementById('emptyState').style.display = 'none';
-        document.getElementById('detailsContent').style.display = 'block';
-        document.getElementById('impactList').innerHTML = `<div class="details-panel__impact-item"><span class="mono">${selectedNodeIds.length} nodes in scope</span></div>`;
-        document.getElementById('callPaths').innerHTML = `<span class="mono">Use the Requirements Workspace to generate documentation for this selection.</span>`;
-      }
-    });
-
-    cy.on('unselect', 'node', function(evt) {
-      const node = evt.target;
-      const idx = selectedNodeIds.indexOf(node.id());
-      if (idx > -1) {
-        selectedNodeIds.splice(idx, 1);
-      }
-      updateWorkspaceScope();
-      if (selectedNodeIds.length === 0) {
-        showEmptyDetails();
-      } else if (selectedNodeIds.length === 1) {
-        const el = cy.getElementById(selectedNodeIds[0]);
-        if (el && el.length) showNodeDetails(el);
-      }
-    });
-
-    cy.on('tap', function(evt) {
-      if (evt.target === cy) {
-        cy.elements().unselect();
-        selectedNodeIds = [];
-        updateWorkspaceScope();
-        showEmptyDetails();
-      }
-    });
+    setupCyEvents();
 
     buildFileTree();
     showEmptyDetails();
