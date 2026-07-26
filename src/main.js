@@ -255,6 +255,104 @@ console.log('main.js loaded');
   let selectedNodeIds = [];
   let currentRepoTree = null;
   let currentRepoSource = 'Demo project';
+  let activeEventSource = null;
+
+  function subscribeToIngestionStream(jobId) {
+    if (!jobId) {
+      console.warn("No jobId provided for subscribeToIngestionStream");
+      return;
+    }
+
+    // Close any existing active stream
+    if (activeEventSource) {
+      activeEventSource.close();
+    }
+
+    const progressContainer = document.getElementById('ingestionProgress');
+    const progressText = document.getElementById('progressText');
+    const progressPercent = document.getElementById('progressPercent');
+    const progressBar = document.getElementById('progressBar');
+
+    if (progressContainer) {
+      progressContainer.style.display = 'flex';
+    }
+    if (progressText) progressText.textContent = 'Connecting stream...';
+    if (progressPercent) progressPercent.textContent = '0%';
+    if (progressBar) {
+      progressBar.style.width = '0%';
+      progressBar.style.background = 'var(--theme-primary)';
+    }
+
+    const streamUrl = `${service.baseUrl}/analyze/stream?job_id=${jobId}`;
+    console.log(`Subscribing to SSE stream: ${streamUrl}`);
+
+    const es = new EventSource(streamUrl);
+    activeEventSource = es;
+
+    es.onmessage = (event) => {
+      console.log('Received SSE message:', event.data);
+      try {
+        const payload = JSON.parse(event.data);
+        const fileName = payload.file || '';
+        const progress = payload.progress !== undefined ? payload.progress : 0;
+        const total = payload.total !== undefined ? payload.total : 100;
+        const percent = total > 0 ? Math.round((progress / total) * 100) : progress;
+        const isDone = payload.done === true;
+        const error = payload.error || '';
+
+        if (progressText) {
+          if (fileName) {
+            progressText.textContent = `Ingesting: ${fileName} (${progress}/${total} files)`;
+          } else {
+            progressText.textContent = `Ingesting (${progress}/${total} files)`;
+          }
+        }
+        if (progressPercent) progressPercent.textContent = `${percent}%`;
+        if (progressBar) progressBar.style.width = `${percent}%`;
+
+        if (error) {
+          console.error('Ingestion error received:', error);
+          if (progressText) progressText.textContent = `Error: ${error}`;
+          if (progressBar) progressBar.style.background = 'var(--theme-danger)';
+          es.close();
+          activeEventSource = null;
+          // Hide progress after a small delay
+          setTimeout(() => {
+            if (progressContainer) progressContainer.style.display = 'none';
+          }, 5000);
+          return;
+        }
+
+        if (isDone) {
+          console.log('Ingestion SSE stream finished: received done signal');
+          if (progressText) progressText.textContent = 'Ingestion complete!';
+          if (progressPercent) progressPercent.textContent = '100%';
+          if (progressBar) progressBar.style.width = '100%';
+          es.close();
+          activeEventSource = null;
+
+          // Workspace loading cycle trigger: load dynamic graph
+          setTimeout(() => {
+            if (progressContainer) progressContainer.style.display = 'none';
+            // Trigger workspace loading cycle
+            loadGraph();
+          }, 1500);
+        }
+      } catch (err) {
+        console.error('Error parsing SSE event data:', err);
+      }
+    };
+
+    es.onerror = (err) => {
+      console.error('SSE Error/Close:', err);
+      // Under SSE, if server completes stream and closes, onerror triggers.
+      // If we are closed or disconnected, we close event source to prevent infinite auto-reconnections.
+      if (es.readyState === EventSource.CLOSED || es.readyState === EventSource.CONNECTING) {
+        // SSE natively reconnects on some errors, but we can close it if the job is done or offline
+        console.log('SSE connection closed or connecting. Active status:', es.readyState);
+      }
+    };
+  }
 
   function updateRepoSourceInfo() {
     const sourceInfo = document.getElementById('repoSourceInfo');
@@ -1240,7 +1338,12 @@ console.log('main.js loaded');
         service.demoMode = false;
         service.graphData = null; // Clear old local graph
         updateRepoSourceInfo();
-        loadGraph();
+
+        if (data.job_id) {
+          subscribeToIngestionStream(data.job_id);
+        } else {
+          loadGraph();
+        }
       } catch (e) {
         console.error('Failed to analyze absolute path:', e);
         alert('Failed to analyze path. Error: ' + e.message);
@@ -1291,6 +1394,12 @@ console.log('main.js loaded');
         const data = await resp.json();
         console.log('Ingestion triggered successfully:', data);
         alert(`Ingestion triggered successfully! Job ID: ${data.job_id || 'started'}`);
+
+        if (data.job_id) {
+          subscribeToIngestionStream(data.job_id);
+        } else {
+          loadGraph();
+        }
       } catch (e) {
         console.error('Remote ingestion failed:', e);
         alert('Failed to trigger remote ingestion. Error: ' + e.message);
