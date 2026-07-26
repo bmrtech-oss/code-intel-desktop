@@ -30,27 +30,82 @@ console.log('main.js loaded');
   // === CodeIntel Service (REST) ===
   class CodeIntelService {
     constructor() {
-      this.baseUrl = localStorage.getItem('code-intel-server-url') || 'http://localhost:8080';
-      this.mcpUrl = localStorage.getItem('code-intel-mcp-url') || 'mcp://localhost:8080';
+      let storedUrl = localStorage.getItem('code-intel-server-url');
+      if (storedUrl === 'http://localhost:8080') {
+        storedUrl = 'http://localhost:8000';
+        localStorage.setItem('code-intel-server-url', 'http://localhost:8000');
+      }
+      this.baseUrl = storedUrl || 'http://localhost:8000';
+
+      let storedMcp = localStorage.getItem('code-intel-mcp-url');
+      if (storedMcp === 'mcp://localhost:8080') {
+        storedMcp = 'mcp://localhost:8000';
+        localStorage.setItem('code-intel-mcp-url', 'mcp://localhost:8000');
+      }
+      this.mcpUrl = storedMcp || 'mcp://localhost:8000';
+
       this.connected = false;
       this.mcpConnected = false;
       this.graphData = null;
       this.mcpTools = [];
       this.demoMode = false;
+      this.currentCommitSHA = null;
+    }
+
+    async safeFetch(url, options = {}) {
+      try {
+        const resp = await fetch(url, options);
+        if (!resp.ok) {
+          if (resp.status === 502 || resp.status === 503) {
+            if (url.startsWith(this.baseUrl)) {
+              triggerOfflineMode(true);
+            }
+          }
+          throw new Error(`Fetch failed with status ${resp.status}`);
+        }
+        if (url.startsWith(this.baseUrl)) {
+          triggerOfflineMode(false);
+        }
+        return resp;
+      } catch (e) {
+        const isNetworkErr = e instanceof TypeError || /Failed to fetch|NetworkError|CORS|TypeError/i.test(e.message || String(e));
+        if (isNetworkErr && url.startsWith(this.baseUrl)) {
+          triggerOfflineMode(true);
+        }
+        throw e;
+      }
     }
 
     async connect() {
       try {
-        const resp = await fetch(`${this.baseUrl}/api/status`, { signal: AbortSignal.timeout(3000) });
-        if (!resp.ok) throw new Error('Server unreachable');
+        const resp = await this.safeFetch(`${this.baseUrl}/api/status`, { signal: AbortSignal.timeout(3000) });
         const data = await resp.json();
         this.connected = true;
         this.connectError = null;
+
+        // Check if backend payload indicates containerized/running in Docker
+        if (data && (data.is_docker === true || data.docker === true || data.dockerMode === true || data.docker_mode === true || data.environment === 'docker')) {
+          localStorage.setItem('dockerMode', 'true');
+        } else {
+          localStorage.setItem('dockerMode', 'false');
+        }
+
         return data;
       } catch (e) {
         this.connected = false;
         this.connectError = e.message || String(e);
-        console.warn('Fallback to mock data. Server error:', this.connectError);
+
+        // Handle CORS / Network error gracefully with an intuitive console warning
+        const isCorsOrNetwork = /Failed to fetch|NetworkError|CORS|TypeError/i.test(this.connectError);
+        if (isCorsOrNetwork) {
+          console.warn(
+            '⚠️ [CORS / Network Warning] Connection to CodeIntel backend failed. This may be due to missing CORS headers on the FastAPI server (expected origins: tauri://localhost or http://tauri.localhost) or the server being offline. Error details:',
+            this.connectError
+          );
+        } else {
+          console.warn('Fallback to mock data. Server error:', this.connectError);
+        }
+
         return { status: 'mock', version: '0.0.0', index: 'ready' };
       }
     }
@@ -60,79 +115,41 @@ console.log('main.js loaded');
         this.graphData = this.getDemoGraphData();
         return this.graphData;
       }
-      if (this.graphData) return this.graphData;
+      if (this.graphData && !this.currentCommitSHA) return this.graphData;
       try {
-        const resp = await fetch(`${this.baseUrl}/api/graph`);
-        if (!resp.ok) throw new Error('Graph fetch failed');
+        let url = `${this.baseUrl}/graph`;
+        if (this.currentCommitSHA) {
+          url += `?version=${encodeURIComponent(this.currentCommitSHA)}`;
+        } else {
+          url += `?version=latest`;
+        }
+        const resp = await this.safeFetch(url);
         this.graphData = await resp.json();
         return this.graphData;
       } catch (e) {
-        console.warn('Using mock graph data');
-        this.graphData = {
-          nodes: [
-            { id: 'n1', label: 'AuthService', type: 'class' },
-            { id: 'n2', label: 'login', type: 'function' },
-            { id: 'n3', label: 'validateUser', type: 'function' },
-            { id: 'n4', label: 'hashPassword', type: 'function' },
-            { id: 'n5', label: 'UserRepository', type: 'class' },
-            { id: 'n6', label: 'findByEmail', type: 'function' },
-            { id: 'n7', label: 'DatabaseConnection', type: 'class' },
-            { id: 'n8', label: 'query', type: 'function' },
-            { id: 'n9', label: 'Logger', type: 'class' },
-            { id: 'n10', label: 'log', type: 'function' },
-            { id: 'n11', label: 'ConfigService', type: 'class' },
-            { id: 'n12', label: 'getSecret', type: 'function' },
-            { id: 'n13', label: 'TokenService', type: 'class' },
-            { id: 'n14', label: 'generateToken', type: 'function' },
-            { id: 'n15', label: 'verifyToken', type: 'function' },
-            { id: 'n16', label: 'EmailService', type: 'class' },
-            { id: 'n17', label: 'sendWelcome', type: 'function' },
-            { id: 'n18', label: 'User', type: 'class' },
-            { id: 'n19', label: 'Role', type: 'enum' },
-            { id: 'n20', label: 'main', type: 'function' },
-          ],
-          edges: [
-            { source: 'n2', target: 'n3', type: 'calls' },
-            { source: 'n2', target: 'n4', type: 'calls' },
-            { source: 'n2', target: 'n5', type: 'calls' },
-            { source: 'n3', target: 'n6', type: 'calls' },
-            { source: 'n3', target: 'n18', type: 'calls' },
-            { source: 'n6', target: 'n7', type: 'calls' },
-            { source: 'n6', target: 'n8', type: 'calls' },
-            { source: 'n5', target: 'n7', type: 'calls' },
-            { source: 'n1', target: 'n9', type: 'calls' },
-            { source: 'n1', target: 'n11', type: 'calls' },
-            { source: 'n1', target: 'n13', type: 'calls' },
-            { source: 'n14', target: 'n12', type: 'calls' },
-            { source: 'n14', target: 'n10', type: 'calls' },
-            { source: 'n15', target: 'n12', type: 'calls' },
-            { source: 'n16', target: 'n17', type: 'calls' },
-            { source: 'n17', target: 'n10', type: 'calls' },
-            { source: 'n20', target: 'n1', type: 'calls' },
-            { source: 'n20', target: 'n16', type: 'calls' },
-            { source: 'n20', target: 'n14', type: 'calls' },
-            { source: 'n2', target: 'n1', type: 'imports' },
-            { source: 'n3', target: 'n5', type: 'imports' },
-            { source: 'n6', target: 'n7', type: 'imports' },
-            { source: 'n14', target: 'n11', type: 'imports' },
-            { source: 'n17', target: 'n9', type: 'imports' },
-            { source: 'n5', target: 'n18', type: 'imports' },
-            { source: 'n1', target: 'n18', type: 'imports' },
-          ]
-        };
-        return this.graphData;
+        try {
+          const resp = await this.safeFetch(`${this.baseUrl}/api/graph`);
+          this.graphData = await resp.json();
+          return this.graphData;
+        } catch (err) {
+          console.warn('Fallback to empty canvas in offline/error state', err);
+          this.graphData = {
+            nodes: [],
+            edges: []
+          };
+          return this.graphData;
+        }
       }
     }
 
     // === LLM Requirements Generation ===
     async generateRequirements(nodeIds, context, provider, model) {
       try {
-        const resp = await fetch(`${this.baseUrl}/api/llm/generate`, {
+        const resp = await this.safeFetch(`${this.baseUrl}/api/llm/generate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ nodeIds, context, provider, model })
         });
-        if (!resp.ok) throw new Error('LLM generation failed');
         return await resp.json();
       } catch (e) {
         console.warn('LLM generation fallback to mock', e.message);
@@ -251,6 +268,194 @@ console.log('main.js loaded');
   let selectedNodeIds = [];
   let currentRepoTree = null;
   let currentRepoSource = 'Demo project';
+  let activeEventSource = null;
+
+  function subscribeToIngestionStream(jobId) {
+    if (!jobId) {
+      console.warn("No jobId provided for subscribeToIngestionStream");
+      return;
+    }
+
+    // Close any existing active stream
+    if (activeEventSource) {
+      activeEventSource.close();
+    }
+
+    const progressContainer = document.getElementById('ingestionProgress');
+    const progressText = document.getElementById('progressText');
+    const progressPercent = document.getElementById('progressPercent');
+    const progressBar = document.getElementById('progressBar');
+
+    if (progressContainer) {
+      progressContainer.style.display = 'flex';
+    }
+    if (progressText) progressText.textContent = 'Connecting stream...';
+    if (progressPercent) progressPercent.textContent = '0%';
+    if (progressBar) {
+      progressBar.style.width = '0%';
+      progressBar.style.background = 'var(--theme-primary)';
+    }
+
+    const streamUrl = `${service.baseUrl}/analyze/stream?job_id=${jobId}`;
+    console.log(`Subscribing to SSE stream: ${streamUrl}`);
+
+    const es = new EventSource(streamUrl);
+    activeEventSource = es;
+
+    es.onmessage = (event) => {
+      console.log('Received SSE message:', event.data);
+      try {
+        const payload = JSON.parse(event.data);
+        const fileName = payload.file || '';
+        const progress = payload.progress !== undefined ? payload.progress : 0;
+        const total = payload.total !== undefined ? payload.total : 100;
+        const percent = total > 0 ? Math.round((progress / total) * 100) : progress;
+        const isDone = payload.done === true;
+        const error = payload.error || '';
+
+        if (progressText) {
+          if (fileName) {
+            progressText.textContent = `Ingesting: ${fileName} (${progress}/${total} files)`;
+          } else {
+            progressText.textContent = `Ingesting (${progress}/${total} files)`;
+          }
+        }
+        if (progressPercent) progressPercent.textContent = `${percent}%`;
+        if (progressBar) progressBar.style.width = `${percent}%`;
+
+        if (error) {
+          console.error('Ingestion error received:', error);
+          if (progressText) progressText.textContent = `Error: ${error}`;
+          if (progressBar) progressBar.style.background = 'var(--theme-danger)';
+          es.close();
+          activeEventSource = null;
+          // Hide progress after a small delay
+          setTimeout(() => {
+            if (progressContainer) progressContainer.style.display = 'none';
+          }, 5000);
+          return;
+        }
+
+        if (isDone) {
+          console.log('Ingestion SSE stream finished: received done signal');
+          if (progressText) progressText.textContent = 'Ingestion complete!';
+          if (progressPercent) progressPercent.textContent = '100%';
+          if (progressBar) progressBar.style.width = '100%';
+          es.close();
+          activeEventSource = null;
+
+          // Workspace loading cycle trigger: load dynamic graph
+          setTimeout(() => {
+            if (progressContainer) progressContainer.style.display = 'none';
+            // Trigger workspace loading cycle
+            loadGraph();
+            loadBranchesAndCommits();
+          }, 1500);
+        }
+      } catch (err) {
+        console.error('Error parsing SSE event data:', err);
+      }
+    };
+
+    es.onerror = (err) => {
+      console.error('SSE Error/Close:', err);
+      // Under SSE, if server completes stream and closes, onerror triggers.
+      // If we are closed or disconnected, we close event source to prevent infinite auto-reconnections.
+      if (es.readyState === EventSource.CLOSED || es.readyState === EventSource.CONNECTING) {
+        // SSE natively reconnects on some errors, but we can close it if the job is done or offline
+        console.log('SSE connection closed or connecting. Active status:', es.readyState);
+      }
+    };
+  }
+
+  async function loadBranchesAndCommits() {
+    if (!currentRepoSource || service.demoMode) {
+      return;
+    }
+
+    const branchSelector = document.getElementById('branchSelector');
+    const commitTimelineRail = document.getElementById('commitTimelineRail');
+
+    console.log(`loadBranchesAndCommits: Fetching for ${currentRepoSource}`);
+
+    try {
+      const resp = await service.safeFetch(`${service.baseUrl}/repo/branches-and-commits?repo_path=${encodeURIComponent(currentRepoSource)}`);
+      const data = await resp.json();
+      const branches = data.branches || [];
+      const commits = data.commits || [];
+
+      // 1. Populate branch dropdown
+      if (branchSelector) {
+        branchSelector.innerHTML = branches.map(b => `<option value="${b}">${b}</option>`).join('');
+      }
+
+      // 2. Populate commit timeline rail
+      if (commitTimelineRail) {
+        if (commits.length === 0) {
+          commitTimelineRail.innerHTML = `<div style="padding: var(--space-sm); text-align: center; color: var(--theme-text-dim); font-size: 11px;">No commits found</div>`;
+        } else {
+          commitTimelineRail.innerHTML = commits.map(c => {
+            const shortSha = c.sha ? c.sha.substring(0, 7) : '—';
+            const author = c.author || 'Unknown';
+            const dateStr = c.date ? new Date(c.date).toLocaleString() : '—';
+            return `
+              <div class="commit-card" data-sha="${c.sha}" style="padding: var(--space-sm); border: 1px solid var(--theme-border); border-radius: var(--radius-sm); background: var(--theme-surface-elevated); cursor: pointer; transition: all 150ms ease; display: flex; flex-direction: column; gap: 2px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; pointer-events: none;">
+                  <span style="font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--theme-primary);">${shortSha}</span>
+                  <span style="font-size: 10px; color: var(--theme-text-dim);">${dateStr}</span>
+                </div>
+                <div style="font-size: 11px; font-weight: 500; color: var(--theme-text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap; pointer-events: none;">by ${author}</div>
+              </div>
+            `;
+          }).join('');
+
+          // 3. Bind click listeners to commit cards
+          commitTimelineRail.querySelectorAll('.commit-card').forEach(card => {
+            card.addEventListener('click', () => {
+              commitTimelineRail.querySelectorAll('.commit-card').forEach(cc => {
+                cc.style.borderColor = 'var(--theme-border)';
+                cc.style.background = 'var(--theme-surface-elevated)';
+              });
+              card.style.borderColor = 'var(--theme-primary)';
+              card.style.background = 'var(--theme-surface)';
+
+              const sha = card.dataset.sha;
+              console.log(`Commit card clicked. Selecting SHA: ${sha}`);
+              service.currentCommitSHA = sha;
+
+              // Trigger graph load and versioned file tree load
+              loadGraph();
+              loadVersionedFileTree(sha);
+            });
+          });
+        }
+
+        // Auto-load matching versioned file tree for latest commit on first load
+        if (commits.length > 0) {
+          const latestSHA = commits[0].sha;
+          service.currentCommitSHA = latestSHA;
+          loadVersionedFileTree(latestSHA);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load branches and commits:', e);
+    }
+  }
+
+  async function loadVersionedFileTree(commitSHA) {
+    if (!commitSHA || service.demoMode) {
+      return;
+    }
+    console.log(`loadVersionedFileTree: Fetching tree for version ${commitSHA}`);
+    try {
+      const resp = await service.safeFetch(`${service.baseUrl}/repo/tree?version=${encodeURIComponent(commitSHA)}`);
+      const data = await resp.json();
+      currentRepoTree = data;
+      buildFileTree();
+    } catch (e) {
+      console.warn('Failed to load versioned file tree:', e);
+    }
+  }
 
   function updateRepoSourceInfo() {
     const sourceInfo = document.getElementById('repoSourceInfo');
@@ -259,8 +464,28 @@ console.log('main.js loaded');
       sourceInfo.textContent = 'Source: Demo project';
     } else if (currentRepoTree) {
       sourceInfo.textContent = 'Source: Local repository';
+    } else if (currentRepoSource) {
+      sourceInfo.textContent = `Source: ${currentRepoSource}`;
     } else {
       sourceInfo.textContent = `Source: ${service.baseUrl}`;
+    }
+  }
+
+  function triggerOfflineMode(isOffline) {
+    const banner = document.getElementById('offlineBanner');
+    const statusEl = document.getElementById('serverStatus');
+    const dotEl = document.getElementById('serverDot');
+
+    if (isOffline) {
+      service.connected = false;
+      if (banner) banner.style.display = 'flex';
+      if (statusEl) statusEl.textContent = 'Offline (Check Server)';
+      if (dotEl) dotEl.style.background = 'var(--theme-danger)';
+    } else {
+      service.connected = true;
+      if (banner) banner.style.display = 'none';
+      if (statusEl) statusEl.textContent = 'Connected';
+      if (dotEl) dotEl.style.background = 'var(--theme-success)';
     }
   }
 
@@ -510,7 +735,8 @@ console.log('main.js loaded');
           html += renderTree(item.children, depth + 1);
           html += `</div>`;
         } else {
-          html += `<div class="file-tree__item file-tree__item--file" style="padding-left:${indent}px;" data-path="${item.path}"><span class="file-tree__toggle" style="visibility:hidden;">▶</span><span class="file-tree__icon">📄</span><span>${key}</span></div>`;
+          const symbolsAttr = (item.symbols && Array.isArray(item.symbols)) ? item.symbols.join(',') : '';
+          html += `<div class="file-tree__item file-tree__item--file" style="padding-left:${indent}px;" data-path="${item.path || ''}" data-symbols-list="${symbolsAttr}"><span class="file-tree__toggle" style="visibility:hidden;">▶</span><span class="file-tree__icon">📄</span><span>${key}</span></div>`;
         }
       });
       return html;
@@ -569,6 +795,7 @@ console.log('main.js loaded');
       item.addEventListener('click', () => {
         const nodeId = item.dataset.nodeId;
         const path = item.dataset.path;
+        const symbolsList = item.dataset.symbolsList;
         if (nodeId && cy) {
           const el = cy.getElementById(nodeId);
           if (el && el.length) {
@@ -580,7 +807,11 @@ console.log('main.js loaded');
           }
         }
         if (path) {
-          alert('Selected file: ' + path);
+          if (symbolsList) {
+            alert(`Selected file: ${path}\n\nSymbols defined here:\n${symbolsList.split(',').join('\n')}`);
+          } else {
+            alert('Selected file: ' + path);
+          }
         }
       });
     });
@@ -738,7 +969,7 @@ console.log('main.js loaded');
       if (e.target === modal) modal.classList.remove('open');
     });
 
-    saveBtn.addEventListener('click', () => {
+    saveBtn.addEventListener('click', async () => {
       const serverUrl = document.getElementById('settingsServerUrl').value.trim();
       const mcpUrl = document.getElementById('settingsMcpUrl').value.trim();
       const provider = document.getElementById('settingsProvider').value;
@@ -746,6 +977,13 @@ console.log('main.js loaded');
       const customModel = document.getElementById('settingsCustomModel').value.trim();
       let key = document.getElementById('settingsApiKey').value.trim();
 
+      const finalModel = model === 'custom' ? customModel : model;
+      let finalKey = key;
+      if (key === '••••••••') {
+        finalKey = localStorage.getItem('code-intel-llm-key-' + provider) || '';
+      }
+
+      // Locally update first
       if (serverUrl) {
         localStorage.setItem('code-intel-server-url', serverUrl);
         service.baseUrl = serverUrl;
@@ -761,6 +999,32 @@ console.log('main.js loaded');
       }
       if (key && key !== '••••••••') {
         localStorage.setItem('code-intel-llm-key-' + provider, key);
+      }
+
+      // Synchronize dynamically with backend /config/llm
+      try {
+        const resp = await service.safeFetch(`${service.baseUrl}/config/llm`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Transient-Memory-Only': 'true',
+            'Cache-Control': 'no-store',
+            'Pragma': 'no-cache'
+          },
+          body: JSON.stringify({
+            provider: provider,
+            model: finalModel,
+            api_key: finalKey,
+            session_id: "default"
+          })
+        });
+        if (!resp.ok) {
+          throw new Error(`HTTP error ${resp.status}`);
+        }
+        console.log('LLM credentials synchronized successfully with backend.');
+      } catch (err) {
+        console.warn('Backend LLM Settings Sync Handshake failed:', err);
+        alert(`⚠️ Warning: Failed to sync LLM credentials with backend. Local settings have been saved, but dynamic LLM operations on the backend might fail until connection is restored.\n\nError: ${err.message || err}`);
       }
 
       modal.classList.remove('open');
@@ -801,15 +1065,19 @@ console.log('main.js loaded');
         statusEl.textContent = 'Connected';
         dotEl.style.background = 'var(--theme-success)';
       } else {
-        statusEl.textContent = service.connectError && /Failed to fetch|NetworkError|CORS/i.test(service.connectError)
-          ? 'Browser CORS / network fallback'
-          : 'Mock mode';
-        dotEl.style.background = 'var(--theme-warning)';
+        statusEl.textContent = 'Offline (Check Server)';
+        dotEl.style.background = 'var(--theme-danger)';
       }
     } catch (e) {
-      statusEl.textContent = 'Disconnected';
+      statusEl.textContent = 'Offline (Check Server)';
       dotEl.style.background = 'var(--theme-danger)';
       console.warn('Connection error:', e);
+    }
+
+    // Do not clear the active Cytoscape canvas elements. Allow the developer to continue in offline mode.
+    if (cy && !service.connected) {
+      console.log('Skipping Cytoscape re-render because app is offline and graph is already active.');
+      return;
     }
 
     const graph = await service.getGraph();
@@ -818,6 +1086,15 @@ console.log('main.js loaded');
 
     document.getElementById('nodeCount').textContent = graph.nodes.length + ' nodes';
     document.getElementById('edgeCount').textContent = graph.edges.length + ' edges';
+
+    const splashEl = document.getElementById('graphSplash');
+    if (splashEl) {
+      if (graph.nodes.length === 0) {
+        splashEl.style.display = 'flex';
+      } else {
+        splashEl.style.display = 'none';
+      }
+    }
 
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
     const cyInstance = cytoscape({
@@ -1132,11 +1409,154 @@ console.log('main.js loaded');
     setupGraphControls();
     setupSettingsModal();
     setupWorkspace();
-    document.getElementById('browseRepoBtn').addEventListener('click', () => {
-      document.getElementById('repoFileInput').click();
+    document.getElementById('browseRepoBtn').addEventListener('click', async () => {
+      const isTauri = typeof window !== 'undefined' && window.TAURI && window.TAURI.dialog;
+      const dockerMode = localStorage.getItem('dockerMode') === 'true';
+
+      let absolutePath = null;
+
+      if (isTauri) {
+        try {
+          // Open Tauri's native directory picker dialog
+          const selectedPath = await window.TAURI.dialog.open({
+            directory: true,
+            multiple: false
+          });
+
+          if (selectedPath) {
+            // Under single select directory: true, selectedPath will be a string
+            absolutePath = Array.isArray(selectedPath) ? selectedPath[0] : selectedPath;
+          }
+        } catch (e) {
+          console.error('Tauri native dialog failed:', e);
+          alert('Failed to open native dialog: ' + e.message);
+          return;
+        }
+      } else {
+        // Fallback for standard browsers in development / testing environments
+        const prompted = prompt('Browser environment detected (Non-Tauri). Enter the absolute system path to analyze:');
+        if (prompted && prompted.trim()) {
+          absolutePath = prompted.trim();
+        }
+      }
+
+      if (!absolutePath) {
+        return;
+      }
+
+      // If dockerMode is active, check the path translation or prompt user
+      if (dockerMode) {
+        // Shared Docker mount path rule (typically /shared or similar)
+        const isShared = absolutePath.startsWith('/shared') || absolutePath.startsWith('\\shared');
+        if (!isShared) {
+          const confirmAnalysis = confirm(
+            `⚠️ [Docker Mode Active] The selected path "${absolutePath}" might not be accessible inside the container.\n\nBackend is running inside a Docker container. Ensure this directory is mounted/accessible (e.g. under "/shared").\n\nDo you still want to proceed?`
+          );
+          if (!confirmAnalysis) {
+            return;
+          }
+        }
+      }
+
+      // Fire a POST /analyze request to backend carrying the absolute path
+      const browseBtn = document.getElementById('browseRepoBtn');
+      browseBtn.disabled = true;
+      const originalText = browseBtn.textContent;
+      browseBtn.textContent = 'Analyzing...';
+
+      try {
+        const resp = await service.safeFetch(`${service.baseUrl}/analyze`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ repo_path: absolutePath })
+        });
+
+        const data = await resp.json();
+        console.log('Absolute path analysis triggered successfully:', data);
+        alert(`Analysis triggered successfully!\nSelected path: ${absolutePath}`);
+
+        currentRepoTree = null;
+        currentRepoSource = absolutePath;
+        service.demoMode = false;
+        service.graphData = null; // Clear old local graph
+        updateRepoSourceInfo();
+
+        if (data.job_id) {
+          subscribeToIngestionStream(data.job_id);
+        } else {
+          loadGraph();
+          loadBranchesAndCommits();
+        }
+      } catch (e) {
+        console.error('Failed to analyze absolute path:', e);
+        alert('Failed to analyze path. Error: ' + e.message);
+      } finally {
+        browseBtn.disabled = false;
+        browseBtn.textContent = originalText;
+      }
     });
     document.getElementById('demoProjectBtn').addEventListener('click', () => {
       selectDemoProject();
+    });
+    document.getElementById('cloneRemoteBtn').addEventListener('click', async () => {
+      const urlInput = document.getElementById('remoteRepoUrlInput');
+      const branchInput = document.getElementById('remoteRepoBranchInput');
+      const cloneBtn = document.getElementById('cloneRemoteBtn');
+
+      const url = urlInput.value.trim();
+      const branch = branchInput.value.trim();
+
+      if (!url) {
+        alert('Please enter a remote Git URL.');
+        return;
+      }
+
+      // Basic Git URL syntax validation (matches https, http, git, or ssh pathways)
+      const gitRegex = /^(https?:\/\/|git@|ssh:\/\/|git:\/\/|git\+ssh:\/\/)[a-zA-Z0-9_\-\.\~\/:]+(?:\.git)?\/?$/;
+      if (!gitRegex.test(url)) {
+        alert('Invalid Git URL format. Please enter a valid HTTP, HTTPS, or SSH Git pathway.');
+        return;
+      }
+
+      // Enter active ingestion state
+      cloneBtn.disabled = true;
+      cloneBtn.textContent = 'Ingesting...';
+
+      try {
+        const payload = { repo_path: url };
+        if (branch) {
+          payload.branch = branch;
+        }
+
+        const resp = await service.safeFetch(`${service.baseUrl}/analyze`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await resp.json();
+        console.log('Ingestion triggered successfully:', data);
+        alert(`Ingestion triggered successfully! Job ID: ${data.job_id || 'started'}`);
+
+        currentRepoTree = null;
+        currentRepoSource = url;
+        service.demoMode = false;
+        service.graphData = null; // Clear old local graph
+        updateRepoSourceInfo();
+
+        if (data.job_id) {
+          subscribeToIngestionStream(data.job_id);
+        } else {
+          loadGraph();
+          loadBranchesAndCommits();
+        }
+      } catch (e) {
+        console.error('Remote ingestion failed:', e);
+        alert('Failed to trigger remote ingestion. Error: ' + e.message);
+      } finally {
+        cloneBtn.disabled = false;
+        cloneBtn.textContent = 'Clone & Ingest';
+      }
     });
     document.getElementById('repoFileInput').addEventListener('change', (event) => {
       const files = event.target.files;
@@ -1144,11 +1564,46 @@ console.log('main.js loaded');
         selectRepoFiles(files);
       }
     });
+
+    const branchSelector = document.getElementById('branchSelector');
+    if (branchSelector) {
+      branchSelector.addEventListener('change', () => {
+        const val = branchSelector.value;
+        console.log(`Branch changed to: ${val}`);
+      });
+    }
+
     loadGraph();
     refreshMCPTools(); // Also refresh MCP tools on load
     enableSplitter();
     enableRightSplitter();
     updateRepoSourceInfo();
+
+    // Periodic health check of FastAPI backend (every 10 seconds)
+    setInterval(async () => {
+      try {
+        const resp = await fetch(`${service.baseUrl}/api/status`, { signal: AbortSignal.timeout(3000) });
+        if (resp.ok) {
+          const data = await resp.json();
+          // If recovered, dismiss the banner and update the status bar
+          triggerOfflineMode(false);
+
+          // Keep dockerMode in sync
+          if (data && (data.is_docker === true || data.docker === true || data.dockerMode === true || data.docker_mode === true || data.environment === 'docker')) {
+            localStorage.setItem('dockerMode', 'true');
+          } else {
+            localStorage.setItem('dockerMode', 'false');
+          }
+        } else {
+          if (resp.status === 502 || resp.status === 503) {
+            triggerOfflineMode(true);
+          }
+        }
+      } catch (e) {
+        // Remain or transition to offline
+        triggerOfflineMode(true);
+      }
+    }, 10000);
 
     // Periodic health check (every 30 seconds)
     setInterval(() => {

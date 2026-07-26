@@ -280,6 +280,38 @@ body { font-family: var(--font-family); background: var(--theme-bg); color: var(
 
 .graph-viewer { flex: 1; position: relative; background: var(--theme-bg); overflow: hidden; min-width: 0; }
 #cy { width: 100%; height: 100%; background: var(--theme-bg); }
+
+/* Zero-Noise State Splash Style */
+.graph-viewer__splash {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: var(--space-sm);
+  color: var(--theme-text-secondary);
+  pointer-events: none; /* Let clicks pass through to the Cytoscape canvas */
+  z-index: 2;
+  transition: opacity 150ms ease;
+}
+
+.graph-viewer__splash-icon {
+  font-size: 36px;
+  opacity: 0.5;
+}
+
+.graph-viewer__splash-text {
+  font-size: 13px;
+  font-weight: 500;
+  max-width: 260px;
+  line-height: 1.5;
+  color: var(--theme-text-secondary);
+}
+
 .graph-controls { position: absolute; bottom: var(--space-lg); right: var(--space-lg); display: flex; flex-direction: column; gap: var(--space-xs); background: var(--theme-surface-elevated); border: 1px solid var(--theme-border); border-radius: var(--radius-lg); padding: var(--space-sm); box-shadow: var(--shadow-md); z-index: 5; }
 .graph-controls__button { width: 28px; height: 28px; border: none; background: transparent; color: var(--theme-text-secondary); border-radius: var(--radius-sm); cursor: pointer; font-size: 14px; transition: all 150ms ease; }
 .graph-controls__button:hover { color: var(--theme-text-primary); background: var(--theme-border); }
@@ -447,6 +479,44 @@ body { font-family: var(--font-family); background: var(--theme-bg); color: var(
   font-size: 12px;
   color: var(--theme-text-secondary);
   margin-top: var(--space-xs);
+}
+
+.commit-card:hover {
+  border-color: var(--theme-primary) !important;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ============================================================
+   OFFLINE WARNING BANNER
+   ============================================================ */
+.offline-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  background: var(--theme-warning);
+  color: #FFFFFF;
+  font-size: 12px;
+  font-weight: 500;
+  padding: var(--space-xs) var(--space-md);
+  height: 28px;
+  min-height: 28px;
+  width: 100%;
+  z-index: 1001;
+  text-align: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* ============================================================
+   SIDEBAR COMPONENT STYLES
+   ============================================================ */
+.sidebar__input {
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+.sidebar__input:focus {
+  border-color: var(--theme-primary) !important;
+  box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2) !important;
 }
 
 /* ============================================================
