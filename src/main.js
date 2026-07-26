@@ -30,8 +30,20 @@ console.log('main.js loaded');
   // === CodeIntel Service (REST) ===
   class CodeIntelService {
     constructor() {
-      this.baseUrl = localStorage.getItem('code-intel-server-url') || 'http://localhost:8080';
-      this.mcpUrl = localStorage.getItem('code-intel-mcp-url') || 'mcp://localhost:8080';
+      let storedUrl = localStorage.getItem('code-intel-server-url');
+      if (storedUrl === 'http://localhost:8080') {
+        storedUrl = 'http://localhost:8000';
+        localStorage.setItem('code-intel-server-url', 'http://localhost:8000');
+      }
+      this.baseUrl = storedUrl || 'http://localhost:8000';
+
+      let storedMcp = localStorage.getItem('code-intel-mcp-url');
+      if (storedMcp === 'mcp://localhost:8080') {
+        storedMcp = 'mcp://localhost:8000';
+        localStorage.setItem('code-intel-mcp-url', 'mcp://localhost:8000');
+      }
+      this.mcpUrl = storedMcp || 'mcp://localhost:8000';
+
       this.connected = false;
       this.mcpConnected = false;
       this.graphData = null;
@@ -46,11 +58,30 @@ console.log('main.js loaded');
         const data = await resp.json();
         this.connected = true;
         this.connectError = null;
+
+        // Check if backend payload indicates containerized/running in Docker
+        if (data && (data.is_docker === true || data.docker === true || data.dockerMode === true || data.docker_mode === true || data.environment === 'docker')) {
+          localStorage.setItem('dockerMode', 'true');
+        } else {
+          localStorage.setItem('dockerMode', 'false');
+        }
+
         return data;
       } catch (e) {
         this.connected = false;
         this.connectError = e.message || String(e);
-        console.warn('Fallback to mock data. Server error:', this.connectError);
+
+        // Handle CORS / Network error gracefully with an intuitive console warning
+        const isCorsOrNetwork = /Failed to fetch|NetworkError|CORS|TypeError/i.test(this.connectError);
+        if (isCorsOrNetwork) {
+          console.warn(
+            '⚠️ [CORS / Network Warning] Connection to CodeIntel backend failed. This may be due to missing CORS headers on the FastAPI server (expected origins: tauri://localhost or http://tauri.localhost) or the server being offline. Error details:',
+            this.connectError
+          );
+        } else {
+          console.warn('Fallback to mock data. Server error:', this.connectError);
+        }
+
         return { status: 'mock', version: '0.0.0', index: 'ready' };
       }
     }
@@ -801,13 +832,11 @@ console.log('main.js loaded');
         statusEl.textContent = 'Connected';
         dotEl.style.background = 'var(--theme-success)';
       } else {
-        statusEl.textContent = service.connectError && /Failed to fetch|NetworkError|CORS/i.test(service.connectError)
-          ? 'Browser CORS / network fallback'
-          : 'Mock mode';
-        dotEl.style.background = 'var(--theme-warning)';
+        statusEl.textContent = 'Offline (Check Server)';
+        dotEl.style.background = 'var(--theme-danger)';
       }
     } catch (e) {
-      statusEl.textContent = 'Disconnected';
+      statusEl.textContent = 'Offline (Check Server)';
       dotEl.style.background = 'var(--theme-danger)';
       console.warn('Connection error:', e);
     }
