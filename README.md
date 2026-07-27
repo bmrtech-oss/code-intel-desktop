@@ -1,92 +1,71 @@
-# Tauri + Vanilla
+# Code-Intel Desktop Console
 
 [![CI Build](https://github.com/bmrtech-oss/code-intel-desktop/actions/workflows/ci.yml/badge.svg)](https://github.com/bmrtech-oss/code-intel-desktop/actions/workflows/ci.yml)
 
-This template should help get you started developing with Tauri in vanilla HTML, CSS and Javascript.
+An extremely performant, high-signal desktop explorer for code bases, utilizing **Tauri** and **Cytoscape.js** front-end visualization integrated with a local FastAPI + tree-sitter bitemporal AST backend database.
 
-## Recommended IDE Setup
+---
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+## ✨ Features & Architecture
 
-## Development
+In alignment with **100% Signal-vs-Noise** design principles, Code-Intel decouples dense code modules from ephemeral visualizations:
 
-Quick commands to develop and build the app locally:
+### 1. Zero-Noise Landing State
+Upon initial startup, the Cytoscape workspace initializes as completely silent (with empty nodes and edges arrays), rendering a centered landing splash: *"Select a folder or symbol to begin exploring."*
 
-- Install JavaScript dependencies (if using npm/pnpm/yarn):
+### 2. Level-of-Detail (LOD) Interactive Topology
+- **Initial Load:** To avoid rendering spaghetti-like clusters, the app requests high-level modules and file nodes only via `GET /graph?version={commit_sha}&level=file`.
+- **Concentric Layout:** Files are positioned in a clean, high-contrast concentric ring pattern.
+- **Lazy Symbol Expansion:** Double-clicking (`dbltap`) any file node retrieves its nested structural symbols (functions, classes, variables) via `POST /query` with `rule: "get_symbols"`, appending them dynamically as compound child nodes.
+- **Real-time Dependency Edges:** When symbol nodes are loaded, the app queries complete detailed connections (`level=all`) and draws valid call/import edges connecting any visible elements.
 
+### 3. Asynchronous Grounded Requirements SSE Stream
+- **Multi-Node Scope Selection:** Support highlighting multiple symbols using `Shift+click` or box selection.
+- **SSE Grounded Context Generation:** Sends selected symbol IDs to `/requirements/stream` via a standard `POST` stream.
+- **Real-time Markdown Rendering:** Decodes and streams incoming markdown chunks using high-performance chunked `TextDecoder` and streams them dynamically into `#reqOutput`.
+- **Traceability Verification:** On stream completion, displays LLM grounding verification scores and populates an interactive Traceability Matrix table linking requirement IDs to their AST code definition references.
+
+### 4. Offline Graceful Degradation & Health Check
+- If the server goes offline, the app triggers a viewport warning banner: *"Server Disconnected — Viewing Offline Local Cache."* while preserving active canvas instances in read-only mode.
+- Retries `/status` every 10 seconds to auto-dismiss warning overlays when server connection is recovered.
+
+---
+
+## 🛠️ Local Development & Quick Start
+
+### Prerequisites
+- **Node.js** (v18+)
+- **Python** (v3.11+)
+
+### 1. Start the Code-Intel Backend (Port 8000)
+Follow the [Backend Startup Guide](docs/backend-startup-guide.md) to set up and run the local FastAPI service on port `8000` with the SQLite compatibility patch:
+```bash
+cd /home/jules/code-intel
+uv venv
+source .venv/bin/activate
+uv pip install -e .
+# Apply SQLite patches and run server
+DATABASE_URL=sqlite+aiosqlite:///codeintel.db uvicorn code_intel.api.server:app --host 127.0.0.1 --port 8000
+```
+
+### 2. Run the Tauri Desktop Client
+Navigate to the root directory of this repository and install dependencies:
 ```bash
 npm install
-# or pnpm install
-# or yarn
-```
-
-- Run the Tauri dev environment (hot reload):
-
-```bash
 npm run dev
-# or the equivalent script in package.json (e.g. `dev`)
 ```
 
-- Build a production bundle:
+---
 
+## 📸 Verification & Headless Testing
+
+For visual verification, serving, and headless browser Playwright testing, the front-end files under `src/` can be locally served using python's built-in simple HTTP server on port `3000`:
 ```bash
-npm run build
+python -m http.server 3000 --directory src
 ```
 
-Note: this project contains both Node frontend files and a Rust `src-tauri` backend. The repository `.gitignore` was updated to exclude build artifacts such as `node_modules`, `target/`, `src-tauri/target/`, `.env` files, and common editor/OS files.
-
-## Release and CI
-
-A GitHub Actions workflow is provided to build native bundles and create a GitHub Release when you push a semantic version tag (tags starting with `v`, e.g. `v1.2.3`).
-
-To create a release locally and trigger CI:
-
+A sample visual verification script using Playwright is located under `/home/jules/verification/verify_landing.py`. Run it via:
 ```bash
-git tag v1.2.3
-git push origin v1.2.3
+python /home/jules/verification/verify_landing.py
 ```
-
-The workflow runs builds on `ubuntu-latest`, `windows-latest`, and `macos-latest`, then attaches the produced bundles to the GitHub Release. If you need automatic version bumping, let me know and I can add a `workflow_dispatch` job that calculates the next semver and tags the repo for you.
-
-### Automated tagging
-
-There is a `workflow_dispatch` workflow available: `Tag and Trigger Release` that can compute a semver bump (`patch`, `minor`, `major`) or accept a `manual_version` input. Running it will create a `vX.Y.Z` tag and push it; the `Release Binaries` workflow will run on the pushed tag.
-
-Example (from Actions UI): choose `release_type=patch` and run the workflow.
-
-### Code signing & notarization
-
-The release workflow supports optional code signing for Windows and notarization for macOS when the following repository secrets are set:
-
-- `WIN_SIGNING_CERT` — base64-encoded PFX certificate for Windows code signing
-- `WIN_SIGNING_PASSWORD` — PFX password
-- `APPLE_API_KEY` — Apple API key file contents (p8) as the secret value
-- `APPLE_API_KEY_ID` — Apple API key id
-- `APPLE_API_KEY_ISSUER_ID` — Apple issuer id
-
-The workflows include conditional steps that run signing/notarization only when these secrets are present. You should verify and adjust the signing commands to match your installer names and signing provider requirements. If you want, I can add automated steps to decrypt a cert from GitHub Secrets, or integrate with third-party signing services.
-
-### CI caching
-
-The release workflow now caches common dependencies to speed up builds:
-
-- Rust: `~/.cargo/registry` and `~/.cargo/git` (cache key based on `Cargo.lock`)
-- Node: `node_modules` (cache key based on `package-lock.json`)
-
-This should reduce CI time for subsequent runs. If you use `pnpm` or `yarn`, we can adjust the cache keys/paths to match your lockfile and package manager.
-
-### Release notes automation
-
-Release notes are now drafted automatically using Release Drafter. It runs on merged pull requests and pushes to `main` and creates a draft release that you can review before publishing.
-
-### Add required secrets
-
-To enable signing/notarization, add the following repository secrets under Settings → Secrets → Actions:
-
-- `WIN_SIGNING_CERT` (base64 PFX)
-- `WIN_SIGNING_PASSWORD`
-- `APPLE_API_KEY` (p8 file contents)
-- `APPLE_API_KEY_ID`
-- `APPLE_API_KEY_ISSUER_ID`
-
-And verify `GITHUB_TOKEN` has default permissions for Release Drafter to create/update drafts (default is usually fine).
+This script automatically runs a headless Chromium browser instance, captures visual screenshots, and records webm videos of important user flows under `/home/jules/verification/`.
