@@ -499,13 +499,31 @@ body { font-family: var(--font-family); background: var(--theme-bg); color: var(
   color: #FFFFFF;
   font-size: 12px;
   font-weight: 500;
-  padding: var(--space-xs) var(--space-md);
-  height: 28px;
+  padding: var(--space-sm) var(--space-md);
+  height: auto;
   min-height: 28px;
   width: 100%;
   z-index: 1001;
   text-align: center;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+.offline-banner__btn {
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.15);
+  color: #FFFFFF;
+  cursor: pointer;
+  transition: all 150ms ease;
+  font-weight: 600;
+}
+.offline-banner__btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: #FFFFFF;
+}
+.offline-banner__btn:active {
+  background: rgba(255, 255, 255, 0.1);
 }
 
 /* ============================================================
