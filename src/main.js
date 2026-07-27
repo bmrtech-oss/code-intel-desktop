@@ -2,6 +2,16 @@
 console.log('main.js loaded');
 
 (function() {
+  // === Safe Timeout Helper ===
+  const getTimeoutSignal = (ms) => {
+    if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+      return AbortSignal.timeout(ms);
+    }
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), ms);
+    return controller.signal;
+  };
+
   // === Theme Manager ===
   const getPreferredTheme = () => {
     const stored = localStorage.getItem('code-intel-theme');
@@ -78,7 +88,7 @@ console.log('main.js loaded');
 
     async connect() {
       try {
-        const resp = await this.safeFetch(`${this.baseUrl}/api/status`, { signal: AbortSignal.timeout(3000) });
+        const resp = await this.safeFetch(`${this.baseUrl}/api/status`, { signal: getTimeoutSignal(3000) });
         const data = await resp.json();
         this.connected = true;
         this.connectError = null;
@@ -241,7 +251,7 @@ console.log('main.js loaded');
       }
 
       try {
-        const resp = await fetch(`${this.mcpUrl}/info`, { signal: AbortSignal.timeout(2000) });
+        const resp = await fetch(`${this.mcpUrl}/info`, { signal: getTimeoutSignal(2000) });
         if (!resp.ok) throw new Error('MCP endpoint unreachable');
         const data = await resp.json();
         this.mcpConnected = true;
@@ -1190,7 +1200,7 @@ console.log('main.js loaded');
           diagnostics.push(`📡 Pinging API Server at: ${testServerUrl}/api/status ...`);
           testStatus.innerText = diagnostics.join('\n');
 
-          const resp = await fetch(`${testServerUrl}/api/status`, { signal: AbortSignal.timeout(4000) });
+          const resp = await fetch(`${testServerUrl}/api/status`, { signal: getTimeoutSignal(4000) });
           if (resp.ok) {
             const data = await resp.json();
             diagnostics.push(`✅ API Server is Online!\n   Version: ${data.version || 'unknown'}\n   Status: ${data.status || 'ready'}\n   Docker Mode: ${!!(data.is_docker || data.docker || data.dockerMode || data.docker_mode || data.environment === 'docker')}`);
@@ -1214,7 +1224,7 @@ console.log('main.js loaded');
             diagnostics.push(`📡 Querying MCP Info at: ${testMcpUrl}/info ...`);
             testStatus.innerText = diagnostics.join('\n');
 
-            const resp = await fetch(`${testMcpUrl}/info`, { signal: AbortSignal.timeout(3000) });
+            const resp = await fetch(`${testMcpUrl}/info`, { signal: getTimeoutSignal(3000) });
             if (resp.ok) {
               const data = await resp.json();
               const numTools = (data.tools || []).length;
@@ -2021,7 +2031,7 @@ console.log('main.js loaded');
     // Periodic health check of FastAPI backend (every 10 seconds)
     setInterval(async () => {
       try {
-        const resp = await fetch(`${service.baseUrl}/api/status`, { signal: AbortSignal.timeout(3000) });
+        const resp = await fetch(`${service.baseUrl}/api/status`, { signal: getTimeoutSignal(3000) });
         if (resp.ok) {
           const data = await resp.json();
           // If recovered, dismiss the banner and update the status bar
@@ -2040,6 +2050,7 @@ console.log('main.js loaded');
         }
       } catch (e) {
         // Remain or transition to offline
+        console.warn('Backend health check error:', e.message || e);
         triggerOfflineMode(true);
       }
     }, 10000);
