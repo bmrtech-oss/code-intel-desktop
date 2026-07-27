@@ -1121,6 +1121,8 @@ console.log('main.js loaded');
     const closeBtn = document.getElementById('settingsModalClose');
     const cancelBtn = document.getElementById('settingsCancel');
     const saveBtn = document.getElementById('settingsSave');
+    const testBtn = document.getElementById('settingsTestBtn');
+    const testStatus = document.getElementById('settingsTestStatus');
 
     openBtn.addEventListener('click', () => {
       document.getElementById('settingsServerUrl').value = service.baseUrl;
@@ -1135,8 +1137,108 @@ console.log('main.js loaded');
       document.getElementById('settingsApiKey').value = storedKey ? '••••••••' : '';
       document.getElementById('settingsKeyStatus').textContent = storedKey ? 'Key saved' : 'Key not saved';
       document.getElementById('settingsCustomModelField').classList.toggle('modal__field--hidden', storedModel !== 'custom');
+
+      // Reset test connection status
+      if (testStatus) {
+        testStatus.textContent = 'Ready to test. Click "Test Connection" to run diagnostics.';
+        testStatus.style.borderColor = 'var(--theme-border)';
+        testStatus.style.color = 'var(--theme-text-secondary)';
+      }
+
       modal.classList.add('open');
     });
+
+    if (testBtn) {
+      testBtn.addEventListener('click', async () => {
+        const testServerUrl = document.getElementById('settingsServerUrl').value.trim();
+        const testMcpUrl = document.getElementById('settingsMcpUrl').value.trim();
+
+        testStatus.innerHTML = '⚡ <strong>Running connection diagnostics...</strong>';
+        testStatus.style.borderColor = 'var(--theme-primary)';
+        testStatus.style.color = 'var(--theme-text-primary)';
+
+        let diagnostics = [];
+        let anyFailed = false;
+
+        // 1. Validate URLs format
+        if (!testServerUrl) {
+          diagnostics.push('❌ Server URL cannot be empty.');
+          anyFailed = true;
+        } else {
+          try {
+            new URL(testServerUrl);
+          } catch (e) {
+            diagnostics.push(`❌ Server URL is invalid: ${e.message}`);
+            anyFailed = true;
+          }
+        }
+
+        if (!testMcpUrl) {
+          diagnostics.push('❌ MCP Endpoint cannot be empty.');
+          anyFailed = true;
+        }
+
+        if (anyFailed) {
+          testStatus.innerHTML = diagnostics.join('\n');
+          testStatus.style.borderColor = 'var(--theme-danger)';
+          testStatus.style.color = 'var(--theme-danger)';
+          return;
+        }
+
+        // 2. Test FastAPI Status endpoint
+        try {
+          diagnostics.push(`📡 Pinging API Server at: ${testServerUrl}/api/status ...`);
+          testStatus.innerText = diagnostics.join('\n');
+
+          const resp = await fetch(`${testServerUrl}/api/status`, { signal: AbortSignal.timeout(4000) });
+          if (resp.ok) {
+            const data = await resp.json();
+            diagnostics.push(`✅ API Server is Online!\n   Version: ${data.version || 'unknown'}\n   Status: ${data.status || 'ready'}\n   Docker Mode: ${!!(data.is_docker || data.docker || data.dockerMode || data.docker_mode || data.environment === 'docker')}`);
+          } else {
+            diagnostics.push(`❌ API Server returned error: ${resp.status} ${resp.statusText}`);
+            anyFailed = true;
+          }
+        } catch (e) {
+          const isCors = /Failed to fetch|NetworkError|CORS|TypeError/i.test(e.message || String(e));
+          if (isCors) {
+            diagnostics.push(`❌ API Server unreachable (CORS or offline).\n   Ensure server is running on port 8000 and permits connections from 'tauri://localhost' or 'http://localhost'.`);
+          } else {
+            diagnostics.push(`❌ API Server connection failed: ${e.message || e}`);
+          }
+          anyFailed = true;
+        }
+
+        // 3. Test MCP Endpoint discovery info endpoint if valid URL schema
+        if (service.canFetchUrl(testMcpUrl)) {
+          try {
+            diagnostics.push(`📡 Querying MCP Info at: ${testMcpUrl}/info ...`);
+            testStatus.innerText = diagnostics.join('\n');
+
+            const resp = await fetch(`${testMcpUrl}/info`, { signal: AbortSignal.timeout(3000) });
+            if (resp.ok) {
+              const data = await resp.json();
+              const numTools = (data.tools || []).length;
+              diagnostics.push(`✅ MCP Server connected successfully! Discovered ${numTools} tools.`);
+            } else {
+              diagnostics.push(`⚠️ MCP Server returned error status: ${resp.status}. Please check backend configuration.`);
+            }
+          } catch (e) {
+            diagnostics.push(`⚠️ MCP Server discovery failed: ${e.message || e}`);
+          }
+        } else {
+          diagnostics.push(`ℹ️ MCP URL uses a non-HTTP protocol (${testMcpUrl}). Direct browser-based pre-test skipped.`);
+        }
+
+        testStatus.innerText = diagnostics.join('\n');
+        if (anyFailed) {
+          testStatus.style.borderColor = 'var(--theme-danger)';
+          testStatus.style.color = 'var(--theme-danger)';
+        } else {
+          testStatus.style.borderColor = 'var(--theme-success)';
+          testStatus.style.color = 'var(--theme-success)';
+        }
+      });
+    }
 
     closeBtn.addEventListener('click', () => modal.classList.remove('open'));
     cancelBtn.addEventListener('click', () => modal.classList.remove('open'));
@@ -1676,6 +1778,36 @@ console.log('main.js loaded');
     splitter.addEventListener('touchstart', onPointerDown, { passive: false });
   }
 
+  // === Manual Reconnection / Retry Logic ===
+  async function performReconnectionRetry() {
+    const retryBtn = document.getElementById('offlineRetryBtn');
+    if (retryBtn) {
+      retryBtn.disabled = true;
+      retryBtn.textContent = '🔄 Retrying...';
+    }
+
+    try {
+      const data = await service.connect();
+      if (service.connected) {
+        triggerOfflineMode(false);
+        // Refresh graph data and timeline
+        loadGraph();
+        loadBranchesAndCommits();
+      } else {
+        triggerOfflineMode(true);
+        console.warn('Manual reconnection retry failed.');
+      }
+    } catch (e) {
+      triggerOfflineMode(true);
+      console.warn('Manual reconnection retry failed with error:', e);
+    } finally {
+      if (retryBtn) {
+        retryBtn.disabled = false;
+        retryBtn.textContent = '🔄 Retry Connection';
+      }
+    }
+  }
+
   // === Initialization ===
   document.addEventListener('DOMContentLoaded', () => {
     const theme = getPreferredTheme();
@@ -1686,6 +1818,24 @@ console.log('main.js loaded');
         setTheme(e.matches ? 'dark' : 'light');
       }
     });
+
+    // Wire up offline banner action buttons
+    const offlineRetryBtn = document.getElementById('offlineRetryBtn');
+    if (offlineRetryBtn) {
+      offlineRetryBtn.addEventListener('click', () => {
+        performReconnectionRetry();
+      });
+    }
+
+    const offlineSettingsBtn = document.getElementById('offlineSettingsBtn');
+    if (offlineSettingsBtn) {
+      offlineSettingsBtn.addEventListener('click', () => {
+        const settingsBtn = document.getElementById('settingsBtn');
+        if (settingsBtn) {
+          settingsBtn.click();
+        }
+      });
+    }
     document.addEventListener('keydown', (e) => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 't' || e.key === 'T')) {
         e.preventDefault();
