@@ -294,6 +294,11 @@
           <input type="password" id="settingsApiKey" placeholder="Enter your API key" />
           <div class="modal__status" id="settingsKeyStatus">Key not saved</div>
         </div>
+        <div class="modal__field">
+          <label for="settingsTimeout">Ingestion Timeout (seconds)</label>
+          <input type="number" id="settingsTimeout" placeholder="e.g. 300" min="10" value="300" />
+          <div class="modal__help">Maximum time allowed for background cloning & parsing tasks (defaults to 300 seconds / 5 minutes).</div>
+        </div>
 
         <!-- Connection Test Block -->
         <div class="modal__field" style="border-top: 1px solid var(--theme-border); padding-top: var(--space-md); margin-top: var(--space-xs);">

@@ -1241,6 +1241,9 @@ console.log('main.js loaded');
       document.getElementById('settingsKeyStatus').textContent = storedKey ? 'Key saved' : 'Key not saved';
       document.getElementById('settingsCustomModelField').classList.toggle('modal__field--hidden', storedModel !== 'custom');
 
+      const storedTimeout = localStorage.getItem('code-intel-ingestion-timeout') || '300';
+      document.getElementById('settingsTimeout').value = storedTimeout;
+
       // Reset test connection status
       if (testStatus) {
         testStatus.textContent = 'Ready to test. Click "Test Connection" to run diagnostics.';
@@ -1395,6 +1398,8 @@ console.log('main.js loaded');
       if (key && key !== '••••••••') {
         localStorage.setItem('code-intel-llm-key-' + provider, key);
       }
+      const timeoutVal = document.getElementById('settingsTimeout').value.trim();
+      localStorage.setItem('code-intel-ingestion-timeout', timeoutVal || '300');
 
       // Synchronize dynamically with backend /config/llm
       try {
@@ -2036,10 +2041,11 @@ console.log('main.js loaded');
       loadGraph();
 
       try {
+        const timeoutVal = parseInt(localStorage.getItem('code-intel-ingestion-timeout') || '300', 10);
         const resp = await service.safeFetch(`${service.baseUrl}/analyze`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ repo_path: absolutePath })
+          body: JSON.stringify({ repo_path: absolutePath, timeout: timeoutVal })
         });
 
         const data = await resp.json();
@@ -2101,7 +2107,8 @@ console.log('main.js loaded');
       loadGraph();
 
       try {
-        const payload = { repo_path: url };
+        const timeoutVal = parseInt(localStorage.getItem('code-intel-ingestion-timeout') || '300', 10);
+        const payload = { repo_path: url, timeout: timeoutVal };
         if (branch) {
           payload.branch = branch;
         }
