@@ -354,6 +354,12 @@ console.log('main.js loaded');
           es.close();
           activeEventSource = null;
 
+          const resolvedRepoPath = payload.repo_path || payload.path || payload.local_path;
+          if (resolvedRepoPath) {
+            currentRepoSource = resolvedRepoPath;
+            updateRepoSourceInfo();
+          }
+
           // Workspace loading cycle trigger: load dynamic graph
           setTimeout(() => {
             if (progressContainer) progressContainer.style.display = 'none';
@@ -378,7 +384,7 @@ console.log('main.js loaded');
     };
   }
 
-  async function loadBranchesAndCommits() {
+  async function loadBranchesAndCommits(selectedBranch = null) {
     if (!currentRepoSource || service.demoMode) {
       return;
     }
@@ -386,17 +392,29 @@ console.log('main.js loaded');
     const branchSelector = document.getElementById('branchSelector');
     const commitTimelineRail = document.getElementById('commitTimelineRail');
 
-    console.log(`loadBranchesAndCommits: Fetching for ${currentRepoSource}`);
+    console.log(`loadBranchesAndCommits: Fetching for ${currentRepoSource}, branch: ${selectedBranch}`);
 
     try {
-      const resp = await service.safeFetch(`${service.baseUrl}/repo/branches-and-commits?repo_path=${encodeURIComponent(currentRepoSource)}`);
+      let url = `${service.baseUrl}/repo/branches-and-commits?repo_path=${encodeURIComponent(currentRepoSource)}`;
+      if (selectedBranch) {
+        url += `&branch=${encodeURIComponent(selectedBranch)}`;
+      }
+      const resp = await service.safeFetch(url);
       const data = await resp.json();
       const branches = data.branches || [];
       const commits = data.commits || [];
 
       // 1. Populate branch dropdown
       if (branchSelector) {
-        branchSelector.innerHTML = branches.map(b => `<option value="${b}">${b}</option>`).join('');
+        let activeBranch = selectedBranch || branchSelector.value;
+        if (!activeBranch && branches.length > 0) {
+          activeBranch = branches.includes('main') ? 'main' : (branches.includes('master') ? 'master' : branches[0]);
+        }
+
+        branchSelector.innerHTML = branches.map(b => {
+          const selectedAttr = b === activeBranch ? ' selected' : '';
+          return `<option value="${b}"${selectedAttr}>${b}</option>`;
+        }).join('');
       }
 
       // 2. Populate commit timeline rail
@@ -440,11 +458,16 @@ console.log('main.js loaded');
           });
         }
 
-        // Auto-load matching versioned file tree for latest commit on first load
+        // Auto-load matching versioned file tree and load graph for latest commit on first load or branch change
         if (commits.length > 0) {
           const latestSHA = commits[0].sha;
-          service.currentCommitSHA = latestSHA;
-          loadVersionedFileTree(latestSHA);
+          if (service.currentCommitSHA !== latestSHA) {
+            service.currentCommitSHA = latestSHA;
+            loadGraph();
+            loadVersionedFileTree(latestSHA);
+          } else {
+            loadVersionedFileTree(latestSHA);
+          }
         }
       }
     } catch (e) {
@@ -670,19 +693,24 @@ console.log('main.js loaded');
     const statusEl = document.getElementById('serverStatus');
     const dotEl = document.getElementById('serverDot');
 
-    try {
-      const status = await service.connect();
-      if (service.connected) {
-        statusEl.textContent = 'Connected';
-        dotEl.style.background = 'var(--theme-success)';
-      } else {
-        statusEl.textContent = 'Offline (Check Server)';
-        dotEl.style.background = 'var(--theme-danger)';
+    if (!service.connected) {
+      try {
+        const status = await service.connect();
+        if (service.connected) {
+          if (statusEl) statusEl.textContent = 'Connected';
+          if (dotEl) dotEl.style.background = 'var(--theme-success)';
+        } else {
+          if (statusEl) statusEl.textContent = 'Offline (Check Server)';
+          if (dotEl) dotEl.style.background = 'var(--theme-danger)';
+        }
+      } catch (e) {
+        if (statusEl) statusEl.textContent = 'Offline (Check Server)';
+        if (dotEl) dotEl.style.background = 'var(--theme-danger)';
+        console.warn('Connection error:', e);
       }
-    } catch (e) {
-      statusEl.textContent = 'Offline (Check Server)';
-      dotEl.style.background = 'var(--theme-danger)';
-      console.warn('Connection error:', e);
+    } else {
+      if (statusEl) statusEl.textContent = 'Connected';
+      if (dotEl) dotEl.style.background = 'var(--theme-success)';
     }
 
     if (cy && !service.connected) {
@@ -1499,19 +1527,24 @@ console.log('main.js loaded');
     const statusEl = document.getElementById('serverStatus');
     const dotEl = document.getElementById('serverDot');
 
-    try {
-      const status = await service.connect();
-      if (service.connected) {
-        statusEl.textContent = 'Connected';
-        dotEl.style.background = 'var(--theme-success)';
-      } else {
-        statusEl.textContent = 'Offline (Check Server)';
-        dotEl.style.background = 'var(--theme-danger)';
+    if (!service.connected) {
+      try {
+        const status = await service.connect();
+        if (service.connected) {
+          if (statusEl) statusEl.textContent = 'Connected';
+          if (dotEl) dotEl.style.background = 'var(--theme-success)';
+        } else {
+          if (statusEl) statusEl.textContent = 'Offline (Check Server)';
+          if (dotEl) dotEl.style.background = 'var(--theme-danger)';
+        }
+      } catch (e) {
+        if (statusEl) statusEl.textContent = 'Offline (Check Server)';
+        if (dotEl) dotEl.style.background = 'var(--theme-danger)';
+        console.warn('Connection error:', e);
       }
-    } catch (e) {
-      statusEl.textContent = 'Offline (Check Server)';
-      dotEl.style.background = 'var(--theme-danger)';
-      console.warn('Connection error:', e);
+    } else {
+      if (statusEl) statusEl.textContent = 'Connected';
+      if (dotEl) dotEl.style.background = 'var(--theme-success)';
     }
 
     // Do not clear the active Cytoscape canvas elements. Allow the developer to continue in offline mode.
@@ -2019,6 +2052,7 @@ console.log('main.js loaded');
       branchSelector.addEventListener('change', () => {
         const val = branchSelector.value;
         console.log(`Branch changed to: ${val}`);
+        loadBranchesAndCommits(val);
       });
     }
 
@@ -2028,8 +2062,21 @@ console.log('main.js loaded');
     enableRightSplitter();
     updateRepoSourceInfo();
 
-    // Periodic health check of FastAPI backend (every 10 seconds)
+    // Periodic health check of FastAPI backend (every 10 seconds if offline, 30 seconds if online)
+    let lastHealthCheckTime = Date.now();
     setInterval(async () => {
+      const now = Date.now();
+      const interval = service.connected ? 30000 : 10000;
+      if (now - lastHealthCheckTime < interval) {
+        return;
+      }
+
+      // Skip status polling if there's an active SSE ingestion stream
+      if (service.connected && activeEventSource) {
+        return;
+      }
+
+      lastHealthCheckTime = now;
       try {
         const resp = await fetch(`${service.baseUrl}/api/status`, { signal: getTimeoutSignal(3000) });
         if (resp.ok) {
@@ -2053,7 +2100,7 @@ console.log('main.js loaded');
         console.warn('Backend health check error:', e.message || e);
         triggerOfflineMode(true);
       }
-    }, 10000);
+    }, 5000);
 
     // Periodic health check (every 30 seconds)
     setInterval(() => {
