@@ -430,17 +430,24 @@ console.log('main.js loaded');
       const branches = data.branches || [];
       const commits = data.commits || [];
 
-      // 1. Populate branch dropdown
+      // 1. Populate branch dropdown only if empty or first load to avoid resetting focus/value during change event
       if (branchSelector) {
         let activeBranch = selectedBranch || branchSelector.value;
         if (!activeBranch && branches.length > 0) {
           activeBranch = branches.includes('main') ? 'main' : (branches.includes('master') ? 'master' : branches[0]);
         }
 
-        branchSelector.innerHTML = branches.map(b => {
-          const selectedAttr = b === activeBranch ? ' selected' : '';
-          return `<option value="${b}"${selectedAttr}>${b}</option>`;
-        }).join('');
+        const currentOptions = Array.from(branchSelector.options).map(opt => opt.value);
+        const listsMatch = currentOptions.length === branches.length && currentOptions.every((v, i) => v === branches[i]);
+
+        if (!listsMatch || branchSelector.children.length <= 1) {
+          branchSelector.innerHTML = branches.map(b => {
+            const selectedAttr = b === activeBranch ? ' selected' : '';
+            return `<option value="${b}"${selectedAttr}>${b}</option>`;
+          }).join('');
+        } else {
+          branchSelector.value = activeBranch;
+        }
       }
 
       // 2. Populate commit timeline rail
