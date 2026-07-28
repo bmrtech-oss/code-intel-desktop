@@ -64,22 +64,48 @@ console.log('main.js loaded');
 
     async safeFetch(url, options = {}) {
       try {
-        const resp = await fetch(url, options);
+        let resp;
+        try {
+          resp = await fetch(url, options);
+        } catch (fetchErr) {
+          // If fetch fails and the URL starts with localhost, auto-retry using 127.0.0.1
+          const localhostPrefix = 'http://localhost:';
+          if (url.startsWith(localhostPrefix)) {
+            const fallbackUrl = url.replace(localhostPrefix, 'http://127.0.0.1:');
+            console.log(`[CORS/Network Fallback] Retrying ${url} using ${fallbackUrl}`);
+            resp = await fetch(fallbackUrl, options);
+
+            // If the fallback succeeded and it is a request to our baseUrl, permanently update baseUrl to use 127.0.0.1
+            if (url.startsWith(this.baseUrl)) {
+              this.baseUrl = this.baseUrl.replace(localhostPrefix, 'http://127.0.0.1:');
+              localStorage.setItem('code-intel-server-url', this.baseUrl);
+              console.log(`[CORS/Network Fallback] Migrated baseUrl to ${this.baseUrl}`);
+            }
+          } else {
+            throw fetchErr;
+          }
+        }
+
+        const normUrl = url.replace('http://localhost:', 'http://127.0.0.1:');
+        const normBase = this.baseUrl.replace('http://localhost:', 'http://127.0.0.1:');
+
         if (!resp.ok) {
           if (resp.status === 502 || resp.status === 503) {
-            if (url.startsWith(this.baseUrl)) {
+            if (normUrl.startsWith(normBase)) {
               triggerOfflineMode(true);
             }
           }
           throw new Error(`Fetch failed with status ${resp.status}`);
         }
-        if (url.startsWith(this.baseUrl)) {
+        if (normUrl.startsWith(normBase)) {
           triggerOfflineMode(false);
         }
         return resp;
       } catch (e) {
+        const normUrl = url.replace('http://localhost:', 'http://127.0.0.1:');
+        const normBase = this.baseUrl.replace('http://localhost:', 'http://127.0.0.1:');
         const isNetworkErr = e instanceof TypeError || /Failed to fetch|NetworkError|CORS|TypeError/i.test(e.message || String(e));
-        if (isNetworkErr && url.startsWith(this.baseUrl)) {
+        if (isNetworkErr && normUrl.startsWith(normBase)) {
           triggerOfflineMode(true);
         }
         throw e;
@@ -495,10 +521,10 @@ console.log('main.js loaded');
     if (!sourceInfo) return;
     if (service.demoMode) {
       sourceInfo.textContent = 'Source: Demo project';
-    } else if (currentRepoTree) {
-      sourceInfo.textContent = 'Source: Local repository';
     } else if (currentRepoSource) {
       sourceInfo.textContent = `Source: ${currentRepoSource}`;
+    } else if (currentRepoTree) {
+      sourceInfo.textContent = 'Source: Local repository';
     } else {
       sourceInfo.textContent = `Source: ${service.baseUrl}`;
     }
@@ -1228,7 +1254,22 @@ console.log('main.js loaded');
           diagnostics.push(`📡 Pinging API Server at: ${testServerUrl}/api/status ...`);
           testStatus.innerText = diagnostics.join('\n');
 
-          const resp = await fetch(`${testServerUrl}/api/status`, { signal: getTimeoutSignal(4000) });
+          let resp;
+          try {
+            resp = await fetch(`${testServerUrl}/api/status`, { signal: getTimeoutSignal(4000) });
+          } catch (err) {
+            // Fallback retry replacing localhost with 127.0.0.1
+            if (testServerUrl.includes('localhost')) {
+              const fallbackUrl = testServerUrl.replace('localhost', '127.0.0.1');
+              diagnostics.push(`⚠️ localhost connection failed. Retrying with IPv4 loopback: ${fallbackUrl}/api/status ...`);
+              testStatus.innerText = diagnostics.join('\n');
+              resp = await fetch(`${fallbackUrl}/api/status`, { signal: getTimeoutSignal(4000) });
+              diagnostics.push(`💡 Tip: localhost is unreachable. Consider updating Server URL to use 127.0.0.1 in Settings if localhost resolves to an inactive IPv6 loopback.`);
+            } else {
+              throw err;
+            }
+          }
+
           if (resp.ok) {
             const data = await resp.json();
             diagnostics.push(`✅ API Server is Online!\n   Version: ${data.version || 'unknown'}\n   Status: ${data.status || 'ready'}\n   Docker Mode: ${!!(data.is_docker || data.docker || data.dockerMode || data.docker_mode || data.environment === 'docker')}`);
@@ -2078,7 +2119,7 @@ console.log('main.js loaded');
 
       lastHealthCheckTime = now;
       try {
-        const resp = await fetch(`${service.baseUrl}/api/status`, { signal: getTimeoutSignal(3000) });
+        const resp = await service.safeFetch(`${service.baseUrl}/api/status`, { signal: getTimeoutSignal(3000) });
         if (resp.ok) {
           const data = await resp.json();
           // If recovered, dismiss the banner and update the status bar
