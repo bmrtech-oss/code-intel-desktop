@@ -619,7 +619,9 @@ console.log('main.js loaded');
     document.getElementById('emptyState').style.display = 'none';
     document.getElementById('detailsContent').style.display = 'block';
 
-    const incoming = service.graphData.edges.filter(e => e.target === nodeId);
+    const graphEdges = (service.graphData && service.graphData.edges) ? service.graphData.edges : [];
+
+    const incoming = graphEdges.filter(e => e.target === nodeId);
     const impactList = document.getElementById('impactList');
     if (incoming.length === 0) {
       impactList.innerHTML = `<div class="details-panel__impact-item"><span class="mono" style="color:var(--theme-text-dim);">No dependents</span></div>`;
@@ -633,7 +635,7 @@ console.log('main.js loaded');
       }).join('');
     }
 
-    const outgoing = service.graphData.edges.filter(e => e.source === nodeId);
+    const outgoing = graphEdges.filter(e => e.source === nodeId);
     const callPaths = document.getElementById('callPaths');
     if (outgoing.length === 0) {
       callPaths.innerHTML = `<span class="mono" style="color:var(--theme-text-dim);">No outgoing calls</span>`;
@@ -775,10 +777,12 @@ console.log('main.js loaded');
         }
       }
 
-      // Ensure we only render FileNodes (representing directories and code files)
-      const fileNodes = graph.nodes.filter(n => n.type === 'file' || n.type === 'directory' || n.type === 'folder');
-      const fileNodeIds = new Set(fileNodes.map(n => n.id));
-      const fileEdges = graph.edges.filter(e => fileNodeIds.has(e.source) && fileNodeIds.has(e.target));
+      // Store graph data in service.graphData so details panel can access incoming/outgoing edges
+      service.graphData = graph;
+
+      // Render file-level nodes (directories, modules, and code files) and their edges
+      const fileNodes = graph.nodes || [];
+      const fileEdges = graph.edges || [];
 
       nodeMap = {};
       fileNodes.forEach(n => { nodeMap[n.id] = n; });
