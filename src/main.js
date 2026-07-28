@@ -509,7 +509,21 @@ console.log('main.js loaded');
     try {
       const resp = await service.safeFetch(`${service.baseUrl}/repo/tree?version=${encodeURIComponent(commitSHA)}`);
       const data = await resp.json();
-      currentRepoTree = data;
+
+      // Fallback retry: if specific commitSHA has no files (e.g. bitemporal disabled or empty DB snapshot), retry with 'latest'
+      if ((!data || Object.keys(data).length === 0) && commitSHA !== 'latest') {
+        console.log(`loadVersionedFileTree: Tree for ${commitSHA} is empty. Retrying fallback to 'latest'...`);
+        try {
+          const fallbackResp = await service.safeFetch(`${service.baseUrl}/repo/tree?version=latest`);
+          const fallbackData = await fallbackResp.json();
+          currentRepoTree = fallbackData;
+        } catch (fallbackErr) {
+          console.warn('Failed to load fallback latest file tree:', fallbackErr);
+          currentRepoTree = data;
+        }
+      } else {
+        currentRepoTree = data;
+      }
       buildFileTree();
     } catch (e) {
       console.warn('Failed to load versioned file tree:', e);
@@ -747,7 +761,19 @@ console.log('main.js loaded');
     try {
       let url = `${service.baseUrl}/graph?version=${encodeURIComponent(sha)}&level=file`;
       const resp = await service.safeFetch(url);
-      const graph = await resp.json();
+      let graph = await resp.json();
+
+      // Fallback retry: if specific version returns empty graph (e.g. bitemporal disabled or empty DB snapshot), retry with 'latest'
+      if ((!graph || !graph.nodes || graph.nodes.length === 0) && sha !== 'latest') {
+        console.log(`loadFileGraph: Graph for version ${sha} is empty. Retrying fallback to 'latest'...`);
+        try {
+          const fallbackUrl = `${service.baseUrl}/graph?version=latest&level=file`;
+          const fallbackResp = await service.safeFetch(fallbackUrl);
+          graph = await fallbackResp.json();
+        } catch (fallbackErr) {
+          console.warn('Failed to load fallback latest file graph:', fallbackErr);
+        }
+      }
 
       // Ensure we only render FileNodes (representing directories and code files)
       const fileNodes = graph.nodes.filter(n => n.type === 'file' || n.type === 'directory' || n.type === 'folder');
