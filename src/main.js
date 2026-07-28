@@ -939,9 +939,9 @@ console.log('main.js loaded');
       return html;
     };
 
-    if (currentRepoTree) {
+    if (currentRepoTree && Object.keys(currentRepoTree).length > 0) {
       container.innerHTML = renderTree(currentRepoTree, 0);
-    } else {
+    } else if (service.demoMode) {
       const folderMap = { 'auth': ['n1', 'n13'], 'user': ['n5', 'n18'], 'utils': ['n9', 'n11'], 'db': ['n7'], 'email': ['n16'], 'root': ['n20'] };
       let html = '';
       html += `<div class="file-tree__item file-tree__item--folder" style="padding-left:8px;"><span class="file-tree__toggle file-tree__toggle--expanded" data-folder-name="src">▶</span><span class="file-tree__icon">📂</span><span>src</span></div>`;
@@ -968,6 +968,8 @@ console.log('main.js loaded');
       }
       html += `</div>`;
       container.innerHTML = html;
+    } else {
+      container.innerHTML = `<div style="padding: var(--space-sm); text-align: center; color: var(--theme-text-dim); font-size: 11px;">No files found in repository tree</div>`;
     }
 
     container.querySelectorAll('.file-tree__toggle').forEach(toggle => {
@@ -2013,6 +2015,15 @@ console.log('main.js loaded');
       const originalText = browseBtn.textContent;
       browseBtn.textContent = 'Analyzing...';
 
+      // Instantly clear demo project context on click
+      currentRepoTree = null;
+      currentRepoSource = absolutePath;
+      service.demoMode = false;
+      service.graphData = null; // Clear old local graph
+      updateRepoSourceInfo();
+      buildFileTree();
+      loadGraph();
+
       try {
         const resp = await service.safeFetch(`${service.baseUrl}/analyze`, {
           method: 'POST',
@@ -2024,10 +2035,8 @@ console.log('main.js loaded');
         console.log('Absolute path analysis triggered successfully:', data);
         alert(`Analysis triggered successfully!\nSelected path: ${absolutePath}`);
 
-        currentRepoTree = null;
-        currentRepoSource = absolutePath;
-        service.demoMode = false;
-        service.graphData = null; // Clear old local graph
+        const resolvedRepoPath = data.repo_path || data.path || data.local_path || absolutePath;
+        currentRepoSource = resolvedRepoPath;
         updateRepoSourceInfo();
 
         if (data.job_id) {
@@ -2071,6 +2080,15 @@ console.log('main.js loaded');
       cloneBtn.disabled = true;
       cloneBtn.textContent = 'Ingesting...';
 
+      // Instantly clear demo project context on click
+      currentRepoTree = null;
+      currentRepoSource = url;
+      service.demoMode = false;
+      service.graphData = null; // Clear old local graph
+      updateRepoSourceInfo();
+      buildFileTree();
+      loadGraph();
+
       try {
         const payload = { repo_path: url };
         if (branch) {
@@ -2087,10 +2105,8 @@ console.log('main.js loaded');
         console.log('Ingestion triggered successfully:', data);
         alert(`Ingestion triggered successfully! Job ID: ${data.job_id || 'started'}`);
 
-        currentRepoTree = null;
-        currentRepoSource = url;
-        service.demoMode = false;
-        service.graphData = null; // Clear old local graph
+        const resolvedRepoPath = data.repo_path || data.path || data.local_path || url;
+        currentRepoSource = resolvedRepoPath;
         updateRepoSourceInfo();
 
         if (data.job_id) {
