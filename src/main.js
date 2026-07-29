@@ -1062,6 +1062,43 @@ console.log('main.js loaded');
     renderDashboardAndSidebar();
   }
 
+  function clearHistoryAndLocalState() {
+    const confirmClear = confirm("Are you sure you want to clear your local session state and entire run history? This cannot be undone.");
+    if (!confirmClear) return;
+
+    localStorage.removeItem("code_intel_session");
+    localStorage.removeItem("code_intel_history");
+
+    hasLoadedRepo = false;
+    currentRepoSource = 'Demo project';
+    currentRepoGitUrl = '';
+    originalRepoSource = '';
+    service.currentCommitSHA = null;
+    service.demoMode = false;
+
+    // Reset inputs
+    const sidebarRepoInput = document.getElementById('remoteRepoUrlInput');
+    const sidebarBranchInput = document.getElementById('remoteRepoBranchInput');
+    const dashRepoInput = document.getElementById('dashboardRepoInput');
+    const dashBranchInput = document.getElementById('dashboardBranchInput');
+    if (sidebarRepoInput) sidebarRepoInput.value = '';
+    if (sidebarBranchInput) sidebarBranchInput.value = '';
+    if (dashRepoInput) dashRepoInput.value = '';
+    if (dashBranchInput) dashBranchInput.value = '';
+
+    // Clear file tree and timeline
+    const container = document.getElementById('fileTree');
+    if (container) container.innerHTML = '';
+    const timeline = document.getElementById('commitTimelineRail');
+    if (timeline) timeline.innerHTML = '<div style="padding: var(--space-sm); text-align: center; color: var(--theme-text-dim); font-size: 11px;">No commits loaded</div>';
+
+    updateRepoSourceInfo();
+    loadGraph();
+    renderDashboardAndSidebar();
+
+    alert("History and local state cleared successfully.");
+  }
+
   function triggerOfflineMode(isOffline) {
     const banner = document.getElementById('offlineBanner');
     const statusEl = document.getElementById('serverStatus');
@@ -1911,6 +1948,21 @@ console.log('main.js loaded');
           testStatus.style.borderColor = 'var(--theme-success)';
           testStatus.style.color = 'var(--theme-success)';
         }
+      });
+    }
+
+    const sideClearBtn = document.getElementById('sidebarClearHistoryBtn');
+    if (sideClearBtn) {
+      sideClearBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        clearHistoryAndLocalState();
+      });
+    }
+
+    const dashClearBtn = document.getElementById('dashboardClearHistoryBtn');
+    if (dashClearBtn) {
+      dashClearBtn.addEventListener('click', () => {
+        clearHistoryAndLocalState();
       });
     }
 

@@ -74,8 +74,9 @@
 
         <!-- 📋 Analyzed Repositories list -->
         <div class="analyzed-repos-sidebar" style="margin-top: var(--space-sm); display: flex; flex-direction: column; gap: var(--space-xs);">
-          <div style="font-size: 11px; font-weight: 600; color: var(--theme-text-secondary); display: flex; align-items: center; gap: 4px;">
+          <div style="font-size: 11px; font-weight: 600; color: var(--theme-text-secondary); display: flex; align-items: center; justify-content: space-between;">
             <span>📋 Analyzed Repositories</span>
+            <span id="sidebarClearHistoryBtn" style="font-size: 10px; color: var(--theme-danger); cursor: pointer; text-decoration: underline; font-weight: 500;">Clear</span>
           </div>
           <div id="sidebarAnalyzedReposList" style="display: flex; flex-direction: column; gap: 4px; max-height: 100px; overflow-y: auto; padding: 4px; border: 1px solid var(--theme-border); border-radius: var(--radius-sm); background: var(--theme-surface-elevated);">
             <div style="font-size: 10px; color: var(--theme-text-dim); text-align: center; padding: 4px;">No analyzed repos</div>
@@ -221,7 +222,10 @@
 
           <!-- Recent Repositories Section -->
           <div style="display: flex; flex-direction: column; gap: var(--space-sm);">
-            <h2 style="margin: 0; font-size: 14px; font-weight: 600; color: var(--theme-text-primary); display: flex; align-items: center; gap: 6px;">📂 Recent Repositories & Historical Runs</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <h2 style="margin: 0; font-size: 14px; font-weight: 600; color: var(--theme-text-primary); display: flex; align-items: center; gap: 6px;">📂 Recent Repositories & Historical Runs</h2>
+              <button class="sidebar__action-button" id="dashboardClearHistoryBtn" style="font-size: 10px; padding: 2px 8px; background: var(--theme-danger); border-color: var(--theme-danger); color: white; cursor: pointer; font-weight: 600;">🗑️ Clear Run History</button>
+            </div>
             <div id="dashboardRecentRunsList" style="display: flex; flex-direction: column; gap: var(--space-md);">
               <!-- Dynamically populated runs list -->
               <div style="padding: var(--space-lg); text-align: center; color: var(--theme-text-dim); background: var(--theme-surface); border: 1px dashed var(--theme-border); border-radius: var(--radius-md); font-size: 12px;">No historical runs found. Analyze a new repository above to begin!</div>
