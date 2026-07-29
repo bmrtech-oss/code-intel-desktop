@@ -114,7 +114,13 @@ console.log('main.js loaded');
 
     async connect() {
       try {
-        const resp = await this.safeFetch(`${this.baseUrl}/api/status`, { signal: getTimeoutSignal(3000) });
+        let resp;
+        try {
+          resp = await this.safeFetch(`${this.baseUrl}/api/status`, { signal: getTimeoutSignal(3000) });
+        } catch (apiErr) {
+          console.log('GET /api/status failed, trying fallback /status...');
+          resp = await this.safeFetch(`${this.baseUrl}/status`, { signal: getTimeoutSignal(3000) });
+        }
         const data = await resp.json();
         this.connected = true;
         this.connectError = null;
@@ -304,6 +310,9 @@ console.log('main.js loaded');
   let selectedNodeIds = [];
   let currentRepoTree = null;
   let currentRepoSource = 'Demo project';
+  let currentRepoGitUrl = '';
+  let originalRepoSource = '';
+  let promptingForIngestion = false;
   let activeEventSource = null;
 
   function subscribeToIngestionStream(jobId) {
@@ -433,15 +442,19 @@ console.log('main.js loaded');
       // 1. Populate branch dropdown only if empty or first load to avoid resetting focus/value during change event
       if (branchSelector) {
         let activeBranch = selectedBranch || branchSelector.value;
-        if (!activeBranch && branches.length > 0) {
-          activeBranch = branches.includes('main') ? 'main' : (branches.includes('master') ? 'master' : branches[0]);
+        let branchesList = [...branches];
+        if (branchesList.length === 0) {
+          branchesList = [activeBranch || 'main'];
+        }
+        if (!activeBranch && branchesList.length > 0) {
+          activeBranch = branchesList.includes('main') ? 'main' : (branchesList.includes('master') ? 'master' : branchesList[0]);
         }
 
         const currentOptions = Array.from(branchSelector.options).map(opt => opt.value);
-        const listsMatch = currentOptions.length === branches.length && currentOptions.every((v, i) => v === branches[i]);
+        const listsMatch = currentOptions.length === branchesList.length && currentOptions.every((v, i) => v === branchesList[i]);
 
         if (!listsMatch || branchSelector.children.length <= 1) {
-          branchSelector.innerHTML = branches.map(b => {
+          branchSelector.innerHTML = branchesList.map(b => {
             const selectedAttr = b === activeBranch ? ' selected' : '';
             return `<option value="${b}"${selectedAttr}>${b}</option>`;
           }).join('');
@@ -504,6 +517,69 @@ console.log('main.js loaded');
     }
   }
 
+  async function promptForCommitIngestion(commitSHA) {
+    if (promptingForIngestion) return;
+    promptingForIngestion = true;
+
+    const shortSha = commitSHA ? commitSHA.substring(0, 7) : '';
+    const confirmIngestion = confirm(
+      `⚠️ [Commit Not Analyzed]\n\nThe historical commit "${shortSha}" has not been parsed by the backend yet.\n\nWould you like to trigger cloning and parsing for this specific commit now?`
+    );
+
+    if (confirmIngestion) {
+      const repoPath = currentRepoGitUrl || originalRepoSource || currentRepoSource;
+      if (!repoPath || repoPath === 'Demo project') {
+        alert('Cannot trigger ingestion: original repository path/URL is unknown.');
+        promptingForIngestion = false;
+        return;
+      }
+
+      // Show ingestion progress block
+      const cloneBtn = document.getElementById('cloneRemoteBtn');
+      const originalBtnText = cloneBtn ? cloneBtn.textContent : 'Clone & Ingest';
+      if (cloneBtn) {
+        cloneBtn.disabled = true;
+        cloneBtn.textContent = 'Ingesting...';
+      }
+
+      try {
+        const timeoutVal = parseInt(localStorage.getItem('code-intel-ingestion-timeout') || '300', 10);
+        const payload = {
+          repo_path: repoPath,
+          version: commitSHA,
+          timeout: timeoutVal
+        };
+
+        const resp = await service.safeFetch(`${service.baseUrl}/analyze`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await resp.json();
+        console.log(`Ingestion for commit ${commitSHA} triggered successfully:`, data);
+        alert(`Analysis triggered successfully for commit ${shortSha}!\nJob ID: ${data.job_id || 'started'}`);
+
+        if (data.job_id) {
+          subscribeToIngestionStream(data.job_id);
+        } else {
+          loadGraph();
+          loadVersionedFileTree(commitSHA);
+        }
+      } catch (err) {
+        console.error('Failed to trigger ingestion for older commit:', err);
+        alert('Failed to trigger ingestion. Error: ' + err.message);
+      } finally {
+        if (cloneBtn) {
+          cloneBtn.disabled = false;
+          cloneBtn.textContent = originalBtnText;
+        }
+      }
+    }
+
+    promptingForIngestion = false;
+  }
+
   async function loadVersionedFileTree(commitSHA) {
     if (!commitSHA || service.demoMode) {
       return;
@@ -513,17 +589,11 @@ console.log('main.js loaded');
       const resp = await service.safeFetch(`${service.baseUrl}/repo/tree?version=${encodeURIComponent(commitSHA)}`);
       const data = await resp.json();
 
-      // Fallback retry: if specific commitSHA has no files (e.g. bitemporal disabled or empty DB snapshot), retry with 'latest'
+      // Fallback retry or prompt ingestion: if specific commitSHA has no files (e.g. bitemporal disabled or empty DB snapshot), retry with 'latest'
       if ((!data || Object.keys(data).length === 0) && commitSHA !== 'latest') {
-        console.log(`loadVersionedFileTree: Tree for ${commitSHA} is empty. Retrying fallback to 'latest'...`);
-        try {
-          const fallbackResp = await service.safeFetch(`${service.baseUrl}/repo/tree?version=latest`);
-          const fallbackData = await fallbackResp.json();
-          currentRepoTree = fallbackData;
-        } catch (fallbackErr) {
-          console.warn('Failed to load fallback latest file tree:', fallbackErr);
-          currentRepoTree = data;
-        }
+        console.log(`loadVersionedFileTree: Tree for ${commitSHA} is empty. Prompting for ingestion.`);
+        await promptForCommitIngestion(commitSHA);
+        return;
       } else {
         currentRepoTree = data;
       }
@@ -601,6 +671,8 @@ console.log('main.js loaded');
   function selectDemoProject() {
     currentRepoTree = null;
     currentRepoSource = 'Demo project';
+    currentRepoGitUrl = '';
+    originalRepoSource = '';
     service.demoMode = true;
     service.graphData = null;
     updateRepoSourceInfo();
@@ -1293,22 +1365,42 @@ console.log('main.js loaded');
           testStatus.innerText = diagnostics.join('\n');
 
           let resp;
+          let useFallbackEndpoint = false;
           try {
             resp = await fetch(`${testServerUrl}/api/status`, { signal: getTimeoutSignal(4000) });
+            if (!resp.ok && resp.status === 404) {
+              useFallbackEndpoint = true;
+            }
           } catch (err) {
-            // Fallback retry replacing localhost with 127.0.0.1
-            if (testServerUrl.includes('localhost')) {
-              const fallbackUrl = testServerUrl.replace('localhost', '127.0.0.1');
-              diagnostics.push(`⚠️ localhost connection failed. Retrying with IPv4 loopback: ${fallbackUrl}/api/status ...`);
-              testStatus.innerText = diagnostics.join('\n');
-              resp = await fetch(`${fallbackUrl}/api/status`, { signal: getTimeoutSignal(4000) });
-              diagnostics.push(`💡 Tip: localhost is unreachable. Consider updating Server URL to use 127.0.0.1 in Settings if localhost resolves to an inactive IPv6 loopback.`);
-            } else {
-              throw err;
+            useFallbackEndpoint = true;
+          }
+
+          if (useFallbackEndpoint) {
+            diagnostics.push(`📡 /api/status not found or unreachable. Retrying with fallback /status ...`);
+            testStatus.innerText = diagnostics.join('\n');
+            try {
+              resp = await fetch(`${testServerUrl}/status`, { signal: getTimeoutSignal(4000) });
+            } catch (err) {
+              // Fallback retry replacing localhost with 127.0.0.1
+              if (testServerUrl.includes('localhost')) {
+                const fallbackUrl = testServerUrl.replace('localhost', '127.0.0.1');
+                diagnostics.push(`⚠️ localhost connection failed. Retrying with IPv4 loopback: ${fallbackUrl}/api/status ...`);
+                testStatus.innerText = diagnostics.join('\n');
+                try {
+                  resp = await fetch(`${fallbackUrl}/api/status`, { signal: getTimeoutSignal(4000) });
+                } catch (err2) {
+                  diagnostics.push(`📡 IPv4 loopback fallback to /status ...`);
+                  testStatus.innerText = diagnostics.join('\n');
+                  resp = await fetch(`${fallbackUrl}/status`, { signal: getTimeoutSignal(4000) });
+                }
+                diagnostics.push(`💡 Tip: localhost is unreachable. Consider updating Server URL to use 127.0.0.1 in Settings if localhost resolves to an inactive IPv6 loopback.`);
+              } else {
+                throw err;
+              }
             }
           }
 
-          if (resp.ok) {
+          if (resp && resp.ok) {
             const data = await resp.json();
             diagnostics.push(`✅ API Server is Online!\n   Version: ${data.version || 'unknown'}\n   Status: ${data.status || 'ready'}\n   Docker Mode: ${!!(data.is_docker || data.docker || data.dockerMode || data.docker_mode || data.environment === 'docker')}`);
           } else {
@@ -2030,6 +2122,8 @@ console.log('main.js loaded');
       // Instantly clear demo project context on click
       currentRepoTree = null;
       currentRepoSource = absolutePath;
+      currentRepoGitUrl = '';
+      originalRepoSource = absolutePath;
       service.demoMode = false;
       service.graphData = null; // Clear old local graph
       updateRepoSourceInfo();
@@ -2096,6 +2190,8 @@ console.log('main.js loaded');
       // Instantly clear demo project context on click
       currentRepoTree = null;
       currentRepoSource = url;
+      currentRepoGitUrl = url;
+      originalRepoSource = url;
       service.demoMode = false;
       service.graphData = null; // Clear old local graph
       updateRepoSourceInfo();
@@ -2175,22 +2271,11 @@ console.log('main.js loaded');
 
       lastHealthCheckTime = now;
       try {
-        const resp = await service.safeFetch(`${service.baseUrl}/api/status`, { signal: getTimeoutSignal(3000) });
-        if (resp.ok) {
-          const data = await resp.json();
-          // If recovered, dismiss the banner and update the status bar
+        await service.connect();
+        if (service.connected) {
           triggerOfflineMode(false);
-
-          // Keep dockerMode in sync
-          if (data && (data.is_docker === true || data.docker === true || data.dockerMode === true || data.docker_mode === true || data.environment === 'docker')) {
-            localStorage.setItem('dockerMode', 'true');
-          } else {
-            localStorage.setItem('dockerMode', 'false');
-          }
         } else {
-          if (resp.status === 502 || resp.status === 503) {
-            triggerOfflineMode(true);
-          }
+          triggerOfflineMode(true);
         }
       } catch (e) {
         // Remain or transition to offline
