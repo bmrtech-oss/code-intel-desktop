@@ -428,6 +428,61 @@ console.log('main.js loaded');
     };
   }
 
+  async function promptForBranchIngestion(branch) {
+    const repoPath = currentRepoGitUrl || originalRepoSource || currentRepoSource;
+    if (!repoPath || repoPath === 'Demo project') {
+      alert('Cannot trigger ingestion: original repository path/URL is unknown.');
+      return;
+    }
+
+    const confirmIngestion = confirm(
+      `⚠️ [Branch Not Analyzed]\n\nThe branch "${branch}" has not been parsed by the backend yet.\n\nWould you like to trigger cloning and parsing for this branch now?`
+    );
+
+    if (confirmIngestion) {
+      const cloneBtn = document.getElementById('cloneRemoteBtn');
+      const originalBtnText = cloneBtn ? cloneBtn.textContent : 'Clone & Ingest';
+      if (cloneBtn) {
+        cloneBtn.disabled = true;
+        cloneBtn.textContent = 'Ingesting...';
+      }
+
+      try {
+        const timeoutVal = parseInt(localStorage.getItem('code-intel-ingestion-timeout') || '300', 10);
+        const payload = {
+          repo_path: repoPath,
+          branch: branch,
+          timeout: timeoutVal
+        };
+
+        const resp = await service.safeFetch(`${service.baseUrl}/analyze`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await resp.json();
+        console.log(`Ingestion for branch ${branch} triggered successfully:`, data);
+        alert(`Analysis triggered successfully for branch ${branch}!\nJob ID: ${data.job_id || 'started'}`);
+
+        if (data.job_id) {
+          subscribeToIngestionStream(data.job_id);
+        } else {
+          loadGraph();
+          loadBranchesAndCommits(branch);
+        }
+      } catch (err) {
+        console.error('Failed to trigger ingestion for branch:', err);
+        alert('Failed to trigger ingestion. Error: ' + err.message);
+      } finally {
+        if (cloneBtn) {
+          cloneBtn.disabled = false;
+          cloneBtn.textContent = originalBtnText;
+        }
+      }
+    }
+  }
+
   async function loadBranchesAndCommits(selectedBranch = null) {
     if (!currentRepoSource || service.demoMode) {
       return;
@@ -437,6 +492,10 @@ console.log('main.js loaded');
     const commitTimelineRail = document.getElementById('commitTimelineRail');
 
     console.log(`loadBranchesAndCommits: Fetching for ${currentRepoSource}, branch: ${selectedBranch}`);
+
+    if (commitTimelineRail) {
+      commitTimelineRail.innerHTML = `<div style="padding: var(--space-sm); text-align: center; color: var(--theme-text-dim); font-size: 11px;">🔄 Loading commits...</div>`;
+    }
 
     try {
       let url = `${service.baseUrl}/repo/branches-and-commits?repo_path=${encodeURIComponent(currentRepoSource)}`;
@@ -475,7 +534,18 @@ console.log('main.js loaded');
       // 2. Populate commit timeline rail
       if (commitTimelineRail) {
         if (commits.length === 0) {
-          commitTimelineRail.innerHTML = `<div style="padding: var(--space-sm); text-align: center; color: var(--theme-text-dim); font-size: 11px;">No commits found</div>`;
+          commitTimelineRail.innerHTML = `
+            <div style="padding: var(--space-sm); text-align: center; color: var(--theme-text-dim); font-size: 11px; display: flex; flex-direction: column; gap: var(--space-xs); align-items: center;">
+              <span>No commits found for branch <strong>${selectedBranch || 'main'}</strong></span>
+              <button class="sidebar__action-button" id="timelineAnalyzeBranchBtn" style="font-size: 10px; padding: 2px 6px; cursor: pointer; font-weight: 500;">⚙️ Analyze Branch</button>
+            </div>
+          `;
+          const btn = document.getElementById('timelineAnalyzeBranchBtn');
+          if (btn) {
+            btn.addEventListener('click', () => {
+              promptForBranchIngestion(selectedBranch || 'main');
+            });
+          }
         } else {
           commitTimelineRail.innerHTML = commits.map(c => {
             const shortSha = c.sha ? c.sha.substring(0, 7) : '—';
@@ -526,6 +596,20 @@ console.log('main.js loaded');
       }
     } catch (e) {
       console.warn('Failed to load branches and commits:', e);
+      if (commitTimelineRail) {
+        commitTimelineRail.innerHTML = `
+          <div style="padding: var(--space-sm); text-align: center; color: var(--theme-danger); font-size: 11px; display: flex; flex-direction: column; gap: var(--space-xs); align-items: center;">
+            <span>⚠️ Failed to load commits</span>
+            <button class="sidebar__action-button" id="timelineAnalyzeBranchFailBtn" style="font-size: 10px; padding: 2px 6px; cursor: pointer;">⚙️ Analyze Branch</button>
+          </div>
+        `;
+        const btn = document.getElementById('timelineAnalyzeBranchFailBtn');
+        if (btn) {
+          btn.addEventListener('click', () => {
+            promptForBranchIngestion(selectedBranch || 'main');
+          });
+        }
+      }
     }
   }
 
