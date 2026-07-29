@@ -390,10 +390,18 @@ console.log('main.js loaded');
           es.close();
           activeEventSource = null;
 
-          const resolvedRepoPath = payload.repo_path || payload.path || payload.local_path;
+          const resolvedRepoPath = payload.repo_path || payload.path || payload.local_path || currentRepoSource;
+          const resolvedBranch = payload.branch || (document.getElementById('remoteRepoBranchInput') ? document.getElementById('remoteRepoBranchInput').value.trim() : 'main') || 'main';
+          const resolvedVersion = payload.version || payload.commit_sha || payload.sha || 'latest';
+
           if (resolvedRepoPath) {
             currentRepoSource = resolvedRepoPath;
             updateRepoSourceInfo();
+          }
+
+          // Save run detail to session persistence
+          if (resolvedRepoPath && resolvedVersion) {
+            saveSessionAndHistory(resolvedRepoPath, resolvedBranch, resolvedVersion);
           }
 
           // Workspace loading cycle trigger: load dynamic graph
@@ -401,7 +409,7 @@ console.log('main.js loaded');
             if (progressContainer) progressContainer.style.display = 'none';
             // Trigger workspace loading cycle
             loadGraph();
-            loadBranchesAndCommits();
+            loadBranchesAndCommits(resolvedBranch);
           }, 1500);
         }
       } catch (err) {
@@ -497,6 +505,9 @@ console.log('main.js loaded');
               const sha = card.dataset.sha;
               console.log(`Commit card clicked. Selecting SHA: ${sha}`);
               service.currentCommitSHA = sha;
+
+              const activeBranch = branchSelector ? branchSelector.value : 'main';
+              saveSessionAndHistory(currentRepoSource, activeBranch, sha);
 
               // Trigger graph load and versioned file tree load
               loadGraph();
@@ -667,6 +678,304 @@ console.log('main.js loaded');
     } else {
       sourceInfo.textContent = `Source: ${service.baseUrl}`;
     }
+  }
+
+  // === Session & History Persistence ===
+  function saveSessionAndHistory(repoPath, branch, version) {
+    if (!repoPath || repoPath === 'Demo project') return;
+
+    // 1. Save active session
+    const session = { repo_path: repoPath, branch: branch || 'main', version };
+    localStorage.setItem("code_intel_session", JSON.stringify(session));
+
+    // 2. Append/update history
+    let history = [];
+    try {
+      history = JSON.parse(localStorage.getItem("code_intel_history") || "[]");
+      if (!Array.isArray(history)) history = [];
+    } catch {
+      history = [];
+    }
+
+    const runDetail = {
+      version,
+      branch: branch || 'main',
+      analyzed_at: new Date().toISOString()
+    };
+
+    let existingRepo = history.find(r => r.repo_path === repoPath);
+    if (existingRepo) {
+      if (!Array.isArray(existingRepo.versions)) {
+        existingRepo.versions = [];
+      }
+      // Remove any existing duplicate version run detail to move it to the top
+      existingRepo.versions = existingRepo.versions.filter(v => v.version !== version);
+      existingRepo.versions.unshift(runDetail);
+    } else {
+      history.unshift({
+        repo_path: repoPath,
+        versions: [runDetail]
+      });
+    }
+
+    localStorage.setItem("code_intel_history", JSON.stringify(history));
+
+    // Render the dashboards & sidebars to keep views in sync
+    renderDashboardAndSidebar();
+  }
+
+  function renderDashboardAndSidebar() {
+    const dashboard = document.getElementById('workspaceDashboard');
+    const recentRunsList = document.getElementById('dashboardRecentRunsList');
+    const sidebarAnalyzedList = document.getElementById('sidebarAnalyzedReposList');
+
+    // Toggle dashboard display based on hasLoadedRepo
+    if (dashboard) {
+      if (hasLoadedRepo) {
+        dashboard.style.display = 'none';
+      } else {
+        dashboard.style.display = 'flex';
+      }
+    }
+
+    let history = [];
+    try {
+      history = JSON.parse(localStorage.getItem("code_intel_history") || "[]");
+      if (!Array.isArray(history)) history = [];
+    } catch {
+      history = [];
+    }
+
+    // 1. Render Dashboard list
+    if (recentRunsList) {
+      if (history.length === 0) {
+        recentRunsList.innerHTML = `
+          <div style="padding: var(--space-lg); text-align: center; color: var(--theme-text-dim); background: var(--theme-surface); border: 1px dashed var(--theme-border); border-radius: var(--radius-md); font-size: 12px;">No historical runs found. Analyze a new repository above to begin!</div>
+        `;
+      } else {
+        recentRunsList.innerHTML = history.map((repo, repoIdx) => {
+          const repoName = repo.repo_path.split('/').pop() || repo.repo_path;
+          const versionsHtml = repo.versions.map(v => {
+            const shortSha = v.version ? v.version.substring(0, 7) : '—';
+            const analyzedAt = v.analyzed_at ? new Date(v.analyzed_at).toLocaleString() : '—';
+            return `
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--space-xs) var(--space-sm); border-radius: var(--radius-sm); background: var(--theme-surface-elevated); border: 1px solid var(--theme-border); font-size: 11px; gap: var(--space-sm);">
+                <div style="display: flex; align-items: center; gap: var(--space-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;">
+                  <span style="font-family: var(--font-mono); font-weight: 600; color: var(--theme-primary);">${shortSha}</span>
+                  <span style="color: var(--theme-text-secondary); overflow: hidden; text-overflow: ellipsis;">[${v.branch}]</span>
+                  <span style="color: var(--theme-text-dim); font-size: 10px;">${analyzedAt}</span>
+                </div>
+                <div style="display: flex; gap: var(--space-xs); flex-shrink: 0;">
+                  <button class="sidebar__action-button dashboard-load-run-btn" data-repo="${repo.repo_path}" data-branch="${v.branch}" data-version="${v.version}" style="font-size: 10px; padding: 2px 6px;">Load Run</button>
+                  <button class="sidebar__action-button dashboard-delete-run-btn" data-repo="${repo.repo_path}" data-version="${v.version}" style="font-size: 10px; padding: 2px 6px; background: var(--theme-danger); border-color: var(--theme-danger); color: white;">Delete</button>
+                </div>
+              </div>
+            `;
+          }).join('');
+
+          return `
+            <div style="border: 1px solid var(--theme-border); border-radius: var(--radius-md); background: var(--theme-surface); padding: var(--space-sm); display: flex; flex-direction: column; gap: var(--space-xs);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                <span style="font-weight: 600; font-size: 12px; color: var(--theme-text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${repo.repo_path}">📦 ${repoName}</span>
+                <span style="font-size: 10px; color: var(--theme-text-dim); max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${repo.repo_path}">${repo.repo_path}</span>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                ${versionsHtml}
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        // Bind clicks to Load and Delete buttons
+        recentRunsList.querySelectorAll('.dashboard-load-run-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const repo = btn.dataset.repo;
+            const branch = btn.dataset.branch;
+            const version = btn.dataset.version;
+            loadRun(repo, branch, version);
+          });
+        });
+
+        recentRunsList.querySelectorAll('.dashboard-delete-run-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const repo = btn.dataset.repo;
+            const version = btn.dataset.version;
+            deleteRun(repo, version);
+          });
+        });
+      }
+    }
+
+    // 2. Render Sidebar recently analyzed repositories
+    if (sidebarAnalyzedList) {
+      if (history.length === 0) {
+        sidebarAnalyzedList.innerHTML = `
+          <div style="font-size: 10px; color: var(--theme-text-dim); text-align: center; padding: 4px;">No analyzed repos</div>
+        `;
+      } else {
+        sidebarAnalyzedList.innerHTML = history.map(repo => {
+          const repoName = repo.repo_path.split('/').pop() || repo.repo_path;
+          return `
+            <div class="sidebar-analyzed-repo-item" data-repo="${repo.repo_path}" style="font-size: 11px; padding: var(--space-xs) var(--space-sm); border-radius: var(--radius-sm); border: 1px solid var(--theme-border); background: var(--theme-surface); cursor: pointer; display: flex; align-items: center; justify-content: space-between; transition: all 150ms ease; margin-bottom: 2px;">
+              <span style="font-weight: 500; color: var(--theme-text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;">📦 ${repoName}</span>
+              <span style="font-size: 10px; color: var(--theme-text-dim); flex-shrink: 0; padding-left: var(--space-xs);">(${repo.versions.length} runs)</span>
+            </div>
+          `;
+        }).join('');
+
+        // Bind clicks to sidebar items
+        sidebarAnalyzedList.querySelectorAll('.sidebar-analyzed-repo-item').forEach(item => {
+          item.addEventListener('click', () => {
+            const repo = item.dataset.repo;
+            console.log(`Sidebar Analyzed Repo clicked: ${repo}`);
+            selectAnalyzedRepoFromSidebar(repo);
+          });
+        });
+      }
+    }
+  }
+
+  function loadRun(repoPath, branch, version) {
+    console.log(`loadRun: Loading repo: ${repoPath}, branch: ${branch}, version: ${version}`);
+
+    currentRepoTree = null;
+    currentRepoSource = repoPath;
+    currentRepoGitUrl = repoPath.startsWith('http') || repoPath.startsWith('git@') ? repoPath : '';
+    originalRepoSource = repoPath;
+    service.demoMode = false;
+    service.currentCommitSHA = version;
+    hasLoadedRepo = true;
+
+    // Sync input fields
+    const sidebarRepoInput = document.getElementById('remoteRepoUrlInput');
+    const sidebarBranchInput = document.getElementById('remoteRepoBranchInput');
+    if (sidebarRepoInput) sidebarRepoInput.value = currentRepoGitUrl || repoPath;
+    if (sidebarBranchInput) sidebarBranchInput.value = branch || '';
+
+    updateRepoSourceInfo();
+
+    // Save session in local storage
+    const session = { repo_path: repoPath, branch: branch || 'main', version };
+    localStorage.setItem("code_intel_session", JSON.stringify(session));
+
+    // Reload branch selector & commit history dropdown
+    loadBranchesAndCommits(branch).then(() => {
+      // Set the select element value
+      const selector = document.getElementById('branchSelector');
+      if (selector) selector.value = branch || 'main';
+    });
+
+    loadGraph();
+    loadVersionedFileTree(version);
+  }
+
+  function deleteRun(repoPath, version) {
+    let history = [];
+    try {
+      history = JSON.parse(localStorage.getItem("code_intel_history") || "[]");
+      if (!Array.isArray(history)) history = [];
+    } catch {
+      history = [];
+    }
+
+    let existingRepo = history.find(r => r.repo_path === repoPath);
+    if (existingRepo) {
+      existingRepo.versions = existingRepo.versions.filter(v => v.version !== version);
+      if (existingRepo.versions.length === 0) {
+        history = history.filter(r => r.repo_path !== repoPath);
+      }
+    }
+
+    localStorage.setItem("code_intel_history", JSON.stringify(history));
+
+    // Check if the deleted run was the active session
+    let savedSession = null;
+    try {
+      savedSession = JSON.parse(localStorage.getItem("code_intel_session"));
+    } catch {}
+
+    if (savedSession && savedSession.repo_path === repoPath && savedSession.version === version) {
+      // Clear active session and go back to Zero-Noise dashboard
+      localStorage.removeItem("code_intel_session");
+      hasLoadedRepo = false;
+      currentRepoSource = 'Demo project';
+      service.currentCommitSHA = null;
+      loadGraph();
+    }
+
+    renderDashboardAndSidebar();
+  }
+
+  function selectAnalyzedRepoFromSidebar(repoPath) {
+    let history = [];
+    try {
+      history = JSON.parse(localStorage.getItem("code_intel_history") || "[]");
+    } catch {}
+
+    const repoItem = history.find(r => r.repo_path === repoPath);
+    if (repoItem && repoItem.versions.length > 0) {
+      const latestRun = repoItem.versions[0];
+      loadRun(repoPath, latestRun.branch, latestRun.version);
+    }
+  }
+
+  async function restoreSessionState() {
+    const savedSession = localStorage.getItem("code_intel_session");
+    if (!savedSession) {
+      console.log('restoreSessionState: No saved session found.');
+      renderDashboardAndSidebar();
+      return;
+    }
+
+    try {
+      const session = JSON.parse(savedSession);
+      if (session && session.repo_path && session.version) {
+        console.log(`restoreSessionState: Found saved session. Quietly verifying version ${session.version}...`);
+
+        // Quietly check if the version exists on backend by querying repo/tree
+        const resp = await fetch(`${service.baseUrl}/repo/tree?version=${encodeURIComponent(session.version)}`);
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data && Object.keys(data).length > 0) {
+            console.log(`restoreSessionState: Version ${session.version} is verified on backend. Restoring...`);
+
+            // Set session details to active session
+            hasLoadedRepo = true;
+            currentRepoSource = session.repo_path;
+            currentRepoGitUrl = session.repo_path.startsWith('http') || session.repo_path.startsWith('git@') ? session.repo_path : '';
+            originalRepoSource = session.repo_path;
+            service.demoMode = false;
+            service.currentCommitSHA = session.version;
+
+            // Pre-populate input fields
+            const sidebarRepoInput = document.getElementById('remoteRepoUrlInput');
+            const sidebarBranchInput = document.getElementById('remoteRepoBranchInput');
+            if (sidebarRepoInput) sidebarRepoInput.value = currentRepoGitUrl || session.repo_path;
+            if (sidebarBranchInput) sidebarBranchInput.value = session.branch || '';
+
+            updateRepoSourceInfo();
+            renderDashboardAndSidebar();
+
+            // Load timeline and set select value
+            await loadBranchesAndCommits(session.branch);
+            const selector = document.getElementById('branchSelector');
+            if (selector) selector.value = session.branch || 'main';
+
+            // Load tree & graph
+            loadGraph();
+            loadVersionedFileTree(session.version);
+            return;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Failed quietly to restore session state:', err);
+    }
+
+    // Fallback: If verification failed, clear activeSession (but keep history!)
+    console.log('restoreSessionState: Session verification failed or is not parsed. Keeping landing state.');
+    hasLoadedRepo = false;
+    renderDashboardAndSidebar();
   }
 
   function triggerOfflineMode(isOffline) {
@@ -2286,6 +2595,66 @@ console.log('main.js loaded');
         }
       });
     }
+
+    const dashAnalyzeBtn = document.getElementById('dashboardAnalyzeBtn');
+    if (dashAnalyzeBtn) {
+      dashAnalyzeBtn.addEventListener('click', async () => {
+        const repoInput = document.getElementById('dashboardRepoInput');
+        const branchInput = document.getElementById('dashboardBranchInput');
+        const url = repoInput ? repoInput.value.trim() : '';
+        const branch = branchInput ? branchInput.value.trim() : '';
+
+        if (!url) {
+          alert('Please enter a remote Git URL or absolute local path.');
+          return;
+        }
+
+        dashAnalyzeBtn.disabled = true;
+        dashAnalyzeBtn.textContent = 'Ingesting...';
+
+        try {
+          const timeoutVal = parseInt(localStorage.getItem('code-intel-ingestion-timeout') || '300', 10);
+          const payload = { repo_path: url, timeout: timeoutVal };
+          if (branch) {
+            payload.branch = branch;
+          }
+
+          const resp = await service.safeFetch(`${service.baseUrl}/analyze`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          const data = await resp.json();
+          console.log('Dashboard Ingestion triggered successfully:', data);
+          alert(`Ingestion triggered successfully! Job ID: ${data.job_id || 'started'}`);
+
+          const resolvedRepoPath = data.repo_path || data.path || data.local_path || url;
+          currentRepoSource = resolvedRepoPath;
+          currentRepoGitUrl = url.startsWith('http') || url.startsWith('git@') ? url : '';
+          originalRepoSource = url;
+          hasLoadedRepo = true;
+          updateRepoSourceInfo();
+
+          if (data.job_id) {
+            subscribeToIngestionStream(data.job_id);
+          } else {
+            const resolvedBranch = branch || 'main';
+            const resolvedVersion = data.version || data.commit_sha || data.sha || 'latest';
+            saveSessionAndHistory(resolvedRepoPath, resolvedBranch, resolvedVersion);
+            loadGraph();
+            loadBranchesAndCommits(resolvedBranch);
+          }
+        } catch (e) {
+          console.error('Dashboard Ingestion failed:', e);
+          alert('Failed to trigger ingestion. Error: ' + e.message);
+        } finally {
+          dashAnalyzeBtn.disabled = false;
+          dashAnalyzeBtn.textContent = 'Analyze & Load';
+        }
+      });
+    }
+
     document.getElementById('cloneRemoteBtn').addEventListener('click', async () => {
       const urlInput = document.getElementById('remoteRepoUrlInput');
       const branchInput = document.getElementById('remoteRepoBranchInput');
@@ -2373,11 +2742,12 @@ console.log('main.js loaded');
       });
     }
 
-    loadGraph();
+    restoreSessionState();
     refreshMCPTools(); // Also refresh MCP tools on load
     enableSplitter();
     enableRightSplitter();
     updateRepoSourceInfo();
+    renderDashboardAndSidebar();
 
     // Periodic health check of FastAPI backend (every 10 seconds if offline, 30 seconds if online)
     let lastHealthCheckTime = Date.now();
