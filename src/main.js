@@ -494,13 +494,9 @@ console.log('main.js loaded');
         // Auto-load matching versioned file tree and load graph for latest commit on first load or branch change
         if (commits.length > 0) {
           const latestSHA = commits[0].sha;
-          if (service.currentCommitSHA !== latestSHA) {
-            service.currentCommitSHA = latestSHA;
-            loadGraph();
-            loadVersionedFileTree(latestSHA);
-          } else {
-            loadVersionedFileTree(latestSHA);
-          }
+          service.currentCommitSHA = latestSHA;
+          loadGraph();
+          loadVersionedFileTree(latestSHA);
         }
       }
     } catch (e) {
