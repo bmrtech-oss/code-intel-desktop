@@ -313,6 +313,7 @@ console.log('main.js loaded');
   let currentRepoGitUrl = '';
   let originalRepoSource = '';
   let promptingForIngestion = false;
+  let hasLoadedRepo = false;
   let activeEventSource = null;
 
   function subscribeToIngestionStream(jobId) {
@@ -517,14 +518,17 @@ console.log('main.js loaded');
     }
   }
 
-  async function promptForCommitIngestion(commitSHA) {
+  async function promptForCommitIngestion(commitSHA, skipConfirm = false) {
     if (promptingForIngestion) return;
     promptingForIngestion = true;
 
     const shortSha = commitSHA ? commitSHA.substring(0, 7) : '';
-    const confirmIngestion = confirm(
-      `⚠️ [Commit Not Analyzed]\n\nThe historical commit "${shortSha}" has not been parsed by the backend yet.\n\nWould you like to trigger cloning and parsing for this specific commit now?`
-    );
+    let confirmIngestion = true;
+    if (!skipConfirm) {
+      confirmIngestion = confirm(
+        `⚠️ [Commit Not Analyzed]\n\nThe historical commit "${shortSha}" has not been parsed by the backend yet.\n\nWould you like to trigger cloning and parsing for this specific commit now?`
+      );
+    }
 
     if (confirmIngestion) {
       const repoPath = currentRepoGitUrl || originalRepoSource || currentRepoSource;
@@ -589,10 +593,48 @@ console.log('main.js loaded');
       const resp = await service.safeFetch(`${service.baseUrl}/repo/tree?version=${encodeURIComponent(commitSHA)}`);
       const data = await resp.json();
 
-      // Fallback retry or prompt ingestion: if specific commitSHA has no files (e.g. bitemporal disabled or empty DB snapshot), retry with 'latest'
+      // Fallback retry or prompt ingestion: if specific commitSHA has no files (e.g. bitemporal disabled or empty DB snapshot)
       if ((!data || Object.keys(data).length === 0) && commitSHA !== 'latest') {
-        console.log(`loadVersionedFileTree: Tree for ${commitSHA} is empty. Prompting for ingestion.`);
-        await promptForCommitIngestion(commitSHA);
+        console.log(`loadVersionedFileTree: Tree for ${commitSHA} is empty. Rendering choices in sidebar.`);
+
+        const container = document.getElementById('fileTree');
+        if (container) {
+          const shortSha = commitSHA.substring(0, 7);
+          container.innerHTML = `
+            <div class="sidebar__unparsed-commit-choices" style="padding: var(--space-md); text-align: center; display: flex; flex-direction: column; gap: var(--space-sm); border: 1px dashed var(--theme-border); border-radius: var(--radius-md); background: var(--theme-surface); margin: var(--space-sm);">
+              <div style="font-size: 12px; font-weight: 600; color: var(--theme-text-primary);">Unanalyzed Commit</div>
+              <div style="font-size: 11px; color: var(--theme-text-secondary); margin-bottom: var(--space-xs);">The snapshot <strong style="font-family: var(--font-mono); color: var(--theme-primary);">${shortSha}</strong> has not been parsed by the backend.</div>
+              <button class="sidebar__action-button" id="sidebarAnalyzeCommitBtn" style="width: 100%; font-size: 11px; padding: 6px var(--space-sm); font-weight: 600; background: var(--theme-primary); color: white; border: none; border-radius: var(--radius-sm); cursor: pointer;">⚙️ Analyze Commit</button>
+              <button class="sidebar__action-button" id="sidebarFallbackLatestBtn" style="width: 100%; font-size: 11px; padding: 6px var(--space-sm); font-weight: 500; background: var(--theme-surface-elevated); color: var(--theme-text-primary); border: 1px solid var(--theme-border); border-radius: var(--radius-sm); cursor: pointer;">🔄 Load Fallback (Latest)</button>
+            </div>
+          `;
+
+          // Bind listeners to buttons
+          const analyzeBtn = document.getElementById('sidebarAnalyzeCommitBtn');
+          if (analyzeBtn) {
+            analyzeBtn.addEventListener('click', () => {
+              promptForCommitIngestion(commitSHA, true);
+            });
+          }
+
+          const fallbackBtn = document.getElementById('sidebarFallbackLatestBtn');
+          if (fallbackBtn) {
+            fallbackBtn.addEventListener('click', async () => {
+              console.log('User chose fallback to latest.');
+              try {
+                const fallbackResp = await service.safeFetch(`${service.baseUrl}/repo/tree?version=latest`);
+                const fallbackData = await fallbackResp.json();
+                currentRepoTree = fallbackData;
+                buildFileTree();
+                service.currentCommitSHA = 'latest';
+                loadGraph();
+              } catch (fallbackErr) {
+                console.warn('Failed to load fallback latest file tree:', fallbackErr);
+                alert('Failed to load fallback latest file tree: ' + fallbackErr.message);
+              }
+            });
+          }
+        }
         return;
       } else {
         currentRepoTree = data;
@@ -605,6 +647,16 @@ console.log('main.js loaded');
 
   function updateRepoSourceInfo() {
     const sourceInfo = document.getElementById('repoSourceInfo');
+    const reanalyzeBtn = document.getElementById('reanalyzeRepoBtn');
+
+    if (reanalyzeBtn) {
+      if (hasLoadedRepo && !service.demoMode) {
+        reanalyzeBtn.style.display = 'inline-block';
+      } else {
+        reanalyzeBtn.style.display = 'none';
+      }
+    }
+
     if (!sourceInfo) return;
     if (service.demoMode) {
       sourceInfo.textContent = 'Source: Demo project';
@@ -675,6 +727,7 @@ console.log('main.js loaded');
     originalRepoSource = '';
     service.demoMode = true;
     service.graphData = null;
+    hasLoadedRepo = true;
     updateRepoSourceInfo();
     loadGraph();
   }
@@ -804,6 +857,25 @@ console.log('main.js loaded');
 
   // === Load File Graph ===
   async function loadFileGraph(commitSHA) {
+    if (!hasLoadedRepo) {
+      console.log('loadFileGraph: No repository has been loaded yet. Rendering Zero-Noise landing state.');
+      nodeMap = {};
+      const nodeCountEl = document.getElementById('nodeCount');
+      const edgeCountEl = document.getElementById('edgeCount');
+      if (nodeCountEl) nodeCountEl.textContent = '0 nodes';
+      if (edgeCountEl) edgeCountEl.textContent = '0 edges';
+      const splashEl = document.getElementById('graphSplash');
+      if (splashEl) splashEl.style.display = 'flex';
+
+      const cyInstance = cytoscape({
+        container: document.getElementById('cy'),
+        elements: { nodes: [], edges: [] }
+      });
+      cy = cyInstance;
+      window.cy = cyInstance;
+      return;
+    }
+
     const sha = commitSHA || service.currentCommitSHA || 'latest';
     console.log(`loadFileGraph: Fetching file-level graph for version ${sha}`);
 
@@ -2126,6 +2198,7 @@ console.log('main.js loaded');
       originalRepoSource = absolutePath;
       service.demoMode = false;
       service.graphData = null; // Clear old local graph
+      hasLoadedRepo = true;
       updateRepoSourceInfo();
       buildFileTree();
       loadGraph();
@@ -2163,6 +2236,56 @@ console.log('main.js loaded');
     document.getElementById('demoProjectBtn').addEventListener('click', () => {
       selectDemoProject();
     });
+    const reanalyzeBtn = document.getElementById('reanalyzeRepoBtn');
+    if (reanalyzeBtn) {
+      reanalyzeBtn.addEventListener('click', async () => {
+        const repoPath = currentRepoGitUrl || originalRepoSource || currentRepoSource;
+        if (!repoPath || repoPath === 'Demo project') {
+          alert('No active repository loaded to reanalyze.');
+          return;
+        }
+
+        const confirmReanalyze = confirm(`Are you sure you want to re-analyze the repository at:\n${repoPath}?`);
+        if (!confirmReanalyze) return;
+
+        reanalyzeBtn.disabled = true;
+        reanalyzeBtn.textContent = 'Reanalyzing...';
+
+        try {
+          const timeoutVal = parseInt(localStorage.getItem('code-intel-ingestion-timeout') || '300', 10);
+          const payload = {
+            repo_path: repoPath,
+            timeout: timeoutVal
+          };
+          if (service.currentCommitSHA && service.currentCommitSHA !== 'latest') {
+            payload.version = service.currentCommitSHA;
+          }
+
+          const resp = await service.safeFetch(`${service.baseUrl}/analyze`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          const data = await resp.json();
+          console.log('Re-analysis triggered successfully:', data);
+          alert(`Re-analysis triggered successfully!\nJob ID: ${data.job_id || 'started'}`);
+
+          if (data.job_id) {
+            subscribeToIngestionStream(data.job_id);
+          } else {
+            loadGraph();
+            loadBranchesAndCommits();
+          }
+        } catch (e) {
+          console.error('Re-analysis failed:', e);
+          alert('Failed to reanalyze. Error: ' + e.message);
+        } finally {
+          reanalyzeBtn.disabled = false;
+          reanalyzeBtn.textContent = 'Reanalyze';
+        }
+      });
+    }
     document.getElementById('cloneRemoteBtn').addEventListener('click', async () => {
       const urlInput = document.getElementById('remoteRepoUrlInput');
       const branchInput = document.getElementById('remoteRepoBranchInput');
@@ -2194,6 +2317,7 @@ console.log('main.js loaded');
       originalRepoSource = url;
       service.demoMode = false;
       service.graphData = null; // Clear old local graph
+      hasLoadedRepo = true;
       updateRepoSourceInfo();
       buildFileTree();
       loadGraph();
