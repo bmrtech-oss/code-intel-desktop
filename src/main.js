@@ -314,6 +314,8 @@ console.log('main.js loaded');
   let originalRepoSource = '';
   let promptingForIngestion = false;
   let hasLoadedRepo = false;
+  let activeIngestingBranch = '';
+  let activeIngestingVersion = '';
   let activeEventSource = null;
 
   function subscribeToIngestionStream(jobId) {
@@ -454,6 +456,9 @@ console.log('main.js loaded');
           branch: branch,
           timeout: timeoutVal
         };
+
+        activeIngestingBranch = branch;
+        activeIngestingVersion = '';
 
         const resp = await service.safeFetch(`${service.baseUrl}/analyze`, {
           method: 'POST',
@@ -2650,6 +2655,10 @@ console.log('main.js loaded');
 
       try {
         const timeoutVal = parseInt(localStorage.getItem('code-intel-ingestion-timeout') || '300', 10);
+
+        activeIngestingBranch = 'main';
+        activeIngestingVersion = '';
+
         const resp = await service.safeFetch(`${service.baseUrl}/analyze`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -2755,6 +2764,9 @@ console.log('main.js loaded');
             payload.branch = branch;
           }
 
+          activeIngestingBranch = branch || 'main';
+          activeIngestingVersion = '';
+
           const resp = await service.safeFetch(`${service.baseUrl}/analyze`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -2833,6 +2845,9 @@ console.log('main.js loaded');
         if (branch) {
           payload.branch = branch;
         }
+
+        activeIngestingBranch = branch || 'main';
+        activeIngestingVersion = '';
 
         const resp = await service.safeFetch(`${service.baseUrl}/analyze`, {
           method: 'POST',
