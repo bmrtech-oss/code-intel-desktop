@@ -1741,7 +1741,7 @@ console.log('main.js loaded');
       const commitSHA = service.currentCommitSHA || 'latest';
       
       // POST request to stream requirements chunk by chunk
-      const response = await fetch(`${service.baseUrl}/requirements/stream?version=${encodeURIComponent(commitSHA)}`, {
+      const response = await service.safeFetch(`${service.baseUrl}/requirements/stream?version=${encodeURIComponent(commitSHA)}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -1851,6 +1851,8 @@ console.log('main.js loaded');
     const testBtn = document.getElementById('settingsTestBtn');
     const testStatus = document.getElementById('settingsTestStatus');
 
+    const testLlmStatus = document.getElementById('settingsLlmTestStatus');
+
     openBtn.addEventListener('click', () => {
       document.getElementById('settingsServerUrl').value = service.baseUrl;
       document.getElementById('settingsMcpUrl').value = service.mcpUrl;
@@ -1874,9 +1876,74 @@ console.log('main.js loaded');
         testStatus.style.borderColor = 'var(--theme-border)';
         testStatus.style.color = 'var(--theme-text-secondary)';
       }
+      if (testLlmStatus) {
+        testLlmStatus.textContent = 'Ready to test. Click "Test LLM Connection" to sync credentials & run pre-flight tests.';
+        testLlmStatus.style.borderColor = 'var(--theme-border)';
+        testLlmStatus.style.color = 'var(--theme-text-secondary)';
+      }
 
       modal.classList.add('open');
     });
+
+    const testLlmBtn = document.getElementById('settingsTestLlmBtn');
+    if (testLlmBtn) {
+      testLlmBtn.addEventListener('click', async () => {
+        const provider = document.getElementById('settingsProvider').value;
+        const model = document.getElementById('settingsLLM').value;
+        const customModel = document.getElementById('settingsCustomModel').value.trim();
+        let key = document.getElementById('settingsApiKey').value.trim();
+
+        const finalModel = model === 'custom' ? customModel : model;
+        let finalKey = key;
+        if (key === '••••••••') {
+          finalKey = localStorage.getItem('code-intel-llm-key-' + provider) || '';
+        }
+
+        if (!finalKey) {
+          testLlmStatus.textContent = '❌ Error: API key cannot be empty.';
+          testLlmStatus.style.borderColor = 'var(--theme-danger)';
+          testLlmStatus.style.color = 'var(--theme-danger)';
+          return;
+        }
+
+        testLlmStatus.innerHTML = '⚡ <strong>Synchronizing LLM credentials with backend...</strong>';
+        testLlmStatus.style.borderColor = 'var(--theme-primary)';
+        testLlmStatus.style.color = 'var(--theme-text-primary)';
+
+        try {
+          const testServerUrl = document.getElementById('settingsServerUrl').value.trim() || service.baseUrl;
+          const resp = await service.safeFetch(`${testServerUrl}/config/llm`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Transient-Memory-Only': 'true',
+              'Cache-Control': 'no-store',
+              'Pragma': 'no-cache'
+            },
+            body: JSON.stringify({
+              provider: provider,
+              model: finalModel,
+              api_key: finalKey,
+              session_id: "default"
+            })
+          });
+
+          if (resp.ok) {
+            testLlmStatus.innerHTML = `✅ LLM Configuration synced successfully!\n   Provider: ${provider}\n   Model: ${finalModel}\n   Key Status: Present (${finalKey.substring(0, 4)}...${finalKey.substring(finalKey.length - 4)})`;
+            testLlmStatus.style.borderColor = 'var(--theme-success)';
+            testLlmStatus.style.color = 'var(--theme-success)';
+          } else {
+            testLlmStatus.textContent = `❌ Backend returned error sync status: ${resp.status} ${resp.statusText}`;
+            testLlmStatus.style.borderColor = 'var(--theme-danger)';
+            testLlmStatus.style.color = 'var(--theme-danger)';
+          }
+        } catch (err) {
+          testLlmStatus.textContent = `❌ Failed to synchronize with backend: ${err.message || err}`;
+          testLlmStatus.style.borderColor = 'var(--theme-danger)';
+          testLlmStatus.style.color = 'var(--theme-danger)';
+        }
+      });
+    }
 
     if (testBtn) {
       testBtn.addEventListener('click', async () => {

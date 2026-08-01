@@ -366,6 +366,15 @@
           <div id="settingsTestStatus" class="modal__status" style="padding: var(--space-sm); border-radius: var(--radius-sm); border: 1px dashed var(--theme-border); background: var(--theme-surface); font-family: var(--font-mono); font-size: 11px; white-space: pre-wrap; line-height: 1.4;">Ready to test. Click "Test Connection" to run diagnostics.</div>
         </div>
 
+        <!-- LLM Connection Test Block -->
+        <div class="modal__field" style="border-top: 1px solid var(--theme-border); padding-top: var(--space-md); margin-top: var(--space-xs);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-xs);">
+            <label style="margin-bottom: 0;">LLM Connection Diagnostics</label>
+            <button class="modal__button" id="settingsTestLlmBtn" style="padding: 2px 8px; font-size: 11px;">🔌 Test LLM Connection</button>
+          </div>
+          <div id="settingsLlmTestStatus" class="modal__status" style="padding: var(--space-sm); border-radius: var(--radius-sm); border: 1px dashed var(--theme-border); background: var(--theme-surface); font-family: var(--font-mono); font-size: 11px; white-space: pre-wrap; line-height: 1.4;">Ready to test. Click "Test LLM Connection" to sync credentials & run pre-flight tests.</div>
+        </div>
+
         <div class="modal__actions">
           <button class="modal__button" id="settingsCancel">Cancel</button>
           <button class="modal__button modal__button--primary" id="settingsSave">Save & Connect</button>
