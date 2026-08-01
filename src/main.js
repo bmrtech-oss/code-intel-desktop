@@ -1212,13 +1212,62 @@ console.log('main.js loaded');
       }).join('');
     }
 
-    document.getElementById('actionOpen').onclick = () => { alert('Open in editor: ' + nodeInfo.label); };
-    document.getElementById('actionFind').onclick = () => { alert('Find references for: ' + nodeInfo.label); };
+    document.getElementById('actionOpen').onclick = async () => {
+      const filePath = nodeInfo.file || nodeInfo.id;
+      try {
+        const resp = await service.safeFetch(`${service.baseUrl}/api/open-editor`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ file_path: filePath })
+        });
+        if (resp.ok) {
+          console.log('Opened in editor successfully:', filePath);
+        } else {
+          alert('Failed to open file in editor.');
+        }
+      } catch (err) {
+        console.warn('Failed to call open-editor API:', err);
+        alert('Failed to open file in editor. Error: ' + err.message);
+      }
+    };
+
+    document.getElementById('actionFind').onclick = async () => {
+      try {
+        const version = service.currentCommitSHA || 'latest';
+        const resp = await service.safeFetch(`${service.baseUrl}/api/references?symbol_id=${encodeURIComponent(nodeInfo.id)}&version=${encodeURIComponent(version)}`);
+        const data = await resp.json();
+        const callerIds = data.references || [];
+
+        if (callerIds.length > 0 && cy) {
+          cy.elements().unselect();
+          let highlightedCount = 0;
+          callerIds.forEach(id => {
+            const el = cy.getElementById(id);
+            if (el && el.length) {
+              el.select();
+              highlightedCount++;
+            }
+          });
+          if (highlightedCount > 0) {
+            alert(`Found and highlighted ${highlightedCount} incoming reference(s) on the canvas.`);
+          } else {
+            alert(`Found ${callerIds.length} reference(s), but they are not loaded in the current view level.`);
+          }
+        } else {
+          alert("No incoming references found for this symbol.");
+        }
+      } catch (err) {
+        console.warn('Failed to find references:', err);
+        alert('Failed to find references. Error: ' + err.message);
+      }
+    };
+
     document.getElementById('actionCopy').onclick = () => {
-      navigator.clipboard?.writeText(nodeInfo.label).then(() => {
-        alert('Copied: ' + nodeInfo.label);
+      const cleanFqn = nodeInfo.id.replace(/^(file:|symbol:)/, '');
+      navigator.clipboard?.writeText(cleanFqn).then(() => {
+        alert('Copied fully-qualified name: ' + cleanFqn);
       }).catch(() => {
-        alert('Copy: ' + nodeInfo.label);
+        alert('Copied label: ' + nodeInfo.label);
       });
     };
     document.getElementById('actionGenerateReq').onclick = () => {
