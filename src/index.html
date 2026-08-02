@@ -410,9 +410,11 @@
           <div class="workspace-panel workspace-panel--right">
             <div class="workspace-panel__label">
               <span>Generated Requirements</span>
-              <div class="workspace-actions">
+              <div class="workspace-actions" style="display: flex; gap: var(--space-xs); align-items: center;">
+                <button class="modal__button" id="showMdBtn" style="padding: 2px 6px; font-size: 11px; background: var(--theme-primary); color: white; border-color: var(--theme-primary);">📄 Show MD</button>
+                <button class="modal__button" id="showJsonBtn" style="padding: 2px 6px; font-size: 11px;">⚙️ Show JSON</button>
                 <button class="modal__button" id="copyReqBtn">📋 Copy</button>
-                <button class="modal__button" id="downloadReqBtn">⬇️ Download</button>
+                <button class="modal__button" id="downloadReqBtn">⬇️ Download MD</button>
               </div>
             </div>
             <div class="workspace-panel__content workspace-panel__content--code" id="reqOutput">

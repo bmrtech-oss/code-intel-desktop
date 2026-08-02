@@ -316,6 +316,9 @@ console.log('main.js loaded');
   let hasLoadedRepo = false;
   let activeIngestingBranch = '';
   let activeIngestingVersion = '';
+  let requirementsRawMarkdown = '';
+  let requirementsJsonTasks = null;
+  let requirementsViewMode = 'markdown'; // 'markdown' or 'json'
   let activeEventSource = null;
 
   function subscribeToIngestionStream(jobId) {
@@ -422,10 +425,13 @@ console.log('main.js loaded');
     es.onerror = (err) => {
       console.error('SSE Error/Close:', err);
       // Under SSE, if server completes stream and closes, onerror triggers.
-      // If we are closed or disconnected, we close event source to prevent infinite auto-reconnections.
+      // We close the EventSource to prevent infinite automatic reconnection loop.
       if (es.readyState === EventSource.CLOSED || es.readyState === EventSource.CONNECTING) {
-        // SSE natively reconnects on some errors, but we can close it if the job is done or offline
-        console.log('SSE connection closed or connecting. Active status:', es.readyState);
+        console.log('Closing SSE connection to prevent infinite auto-reconnections. Active status:', es.readyState);
+        es.close();
+        if (activeEventSource === es) {
+          activeEventSource = null;
+        }
       }
     };
   }
@@ -593,10 +599,29 @@ console.log('main.js loaded');
 
         // Auto-load matching versioned file tree and load graph for latest commit on first load or branch change
         if (commits.length > 0) {
-          const latestSHA = commits[0].sha;
-          service.currentCommitSHA = latestSHA;
-          loadGraph();
-          loadVersionedFileTree(latestSHA);
+          const commitShas = commits.map(c => c.sha);
+          const hasCurrentCommitInList = service.currentCommitSHA && commitShas.includes(service.currentCommitSHA);
+
+          if (!hasCurrentCommitInList) {
+            const latestSHA = commits[0].sha;
+            service.currentCommitSHA = latestSHA;
+            loadGraph();
+            loadVersionedFileTree(latestSHA);
+          } else {
+            // Highlight the active commit card in the timeline rail
+            commitTimelineRail.querySelectorAll('.commit-card').forEach(cc => {
+              if (cc.dataset.sha === service.currentCommitSHA) {
+                cc.style.borderColor = 'var(--theme-primary)';
+                cc.style.background = 'var(--theme-surface)';
+              } else {
+                cc.style.borderColor = 'var(--theme-border)';
+                cc.style.background = 'var(--theme-surface-elevated)';
+              }
+            });
+            // Also ensure we load the file tree and graph for the current active commit
+            loadGraph();
+            loadVersionedFileTree(service.currentCommitSHA);
+          }
         }
       }
     } catch (e) {
@@ -924,7 +949,7 @@ console.log('main.js loaded');
     }
   }
 
-  function loadRun(repoPath, branch, version) {
+  async function loadRun(repoPath, branch, version) {
     console.log(`loadRun: Loading repo: ${repoPath}, branch: ${branch}, version: ${version}`);
 
     currentRepoTree = null;
@@ -948,11 +973,10 @@ console.log('main.js loaded');
     localStorage.setItem("code_intel_session", JSON.stringify(session));
 
     // Reload branch selector & commit history dropdown
-    loadBranchesAndCommits(branch).then(() => {
-      // Set the select element value
-      const selector = document.getElementById('branchSelector');
-      if (selector) selector.value = branch || 'main';
-    });
+    await loadBranchesAndCommits(branch);
+
+    const selector = document.getElementById('branchSelector');
+    if (selector) selector.value = branch || 'main';
 
     loadGraph();
     loadVersionedFileTree(version);
@@ -1737,6 +1761,10 @@ console.log('main.js loaded');
     generateBtn.innerHTML = '<span class="spinner"></span> Generating...';
     status.textContent = 'Generating requirements using ' + model + '...';
 
+    // Reset local cache
+    requirementsRawMarkdown = '';
+    requirementsJsonTasks = null;
+
     try {
       const commitSHA = service.currentCommitSHA || 'latest';
       
@@ -1778,9 +1806,11 @@ console.log('main.js loaded');
               const parsed = JSON.parse(dataStr);
 
               if (parsed.token) {
-                // Render incoming markdown chunks inside #reqOutput in real-time
-                output.textContent += parsed.token;
-                output.scrollTop = output.scrollHeight;
+                requirementsRawMarkdown += parsed.token;
+                if (requirementsViewMode === 'markdown') {
+                  output.textContent = requirementsRawMarkdown;
+                  output.scrollTop = output.scrollHeight;
+                }
               }
 
               if (parsed.done === true) {
@@ -1791,6 +1821,13 @@ console.log('main.js loaded');
                 status.textContent = `✅ Complete! Verification status: ${isVerified} (Confidence Score: ${confidence})`;
 
                 const reqJson = parsed.req_json || {};
+                requirementsJsonTasks = reqJson; // Store the complete json result!
+
+                if (requirementsViewMode === 'json') {
+                  output.textContent = JSON.stringify(reqJson, null, 2);
+                  output.scrollTop = 0;
+                }
+
                 const tasks = reqJson.tasks || [];
                 let rows = '';
 
@@ -1825,7 +1862,7 @@ console.log('main.js loaded');
                   });
                 });
 
-                window._generatedReqDoc = output.textContent;
+                window._generatedReqDoc = requirementsRawMarkdown;
               }
             } catch (err) {
               console.warn("Failed to parse SSE JSON chunk:", err);
@@ -1912,28 +1949,75 @@ console.log('main.js loaded');
 
         try {
           const testServerUrl = document.getElementById('settingsServerUrl').value.trim() || service.baseUrl;
-          const resp = await service.safeFetch(`${testServerUrl}/config/llm`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Transient-Memory-Only': 'true',
-              'Cache-Control': 'no-store',
-              'Pragma': 'no-cache'
-            },
-            body: JSON.stringify({
-              provider: provider,
-              model: finalModel,
-              api_key: finalKey,
-              session_id: "default"
-            })
-          });
+          let resp;
+          let success = false;
+          let errorMessage = '';
 
-          if (resp.ok) {
-            testLlmStatus.innerHTML = `✅ LLM Configuration synced successfully!\n   Provider: ${provider}\n   Model: ${finalModel}\n   Key Status: Present (${finalKey.substring(0, 4)}...${finalKey.substring(finalKey.length - 4)})`;
+          // 1. Try new robust test endpoint /api/llm/test
+          try {
+            resp = await service.safeFetch(`${testServerUrl}/api/llm/test`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ provider, model: finalModel, api_key: finalKey })
+            });
+            if (resp.ok) {
+              success = true;
+            } else if (resp.status !== 404) {
+              errorMessage = `HTTP Error ${resp.status} on /api/llm/test`;
+            }
+          } catch (err) {
+            errorMessage = err.message;
+          }
+
+          // 2. Try fallback /config/llm/test if first failed or returned 404
+          if (!success && (!resp || resp.status === 404)) {
+            console.log('Test LLM: Trying fallback /config/llm/test...');
+            try {
+              resp = await service.safeFetch(`${testServerUrl}/config/llm/test`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ provider, model: finalModel, api_key: finalKey })
+              });
+              if (resp.ok) {
+                success = true;
+              } else if (resp.status !== 404) {
+                errorMessage = `HTTP Error ${resp.status} on /config/llm/test`;
+              }
+            } catch (err) {
+              errorMessage = err.message;
+            }
+          }
+
+          // 3. Try standard sync fallback /config/llm if both test endpoints returned 404
+          if (!success && (!resp || resp.status === 404)) {
+            console.log('Test LLM: Falling back to sync /config/llm...');
+            try {
+              resp = await service.safeFetch(`${testServerUrl}/config/llm`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'X-Transient-Memory-Only': 'true',
+                  'Cache-Control': 'no-store',
+                  'Pragma': 'no-cache'
+                },
+                body: JSON.stringify({ provider, model: finalModel, api_key: finalKey, session_id: "default" })
+              });
+              if (resp.ok) {
+                success = true;
+              } else {
+                errorMessage = `HTTP Error ${resp.status} on /config/llm`;
+              }
+            } catch (err) {
+              errorMessage = err.message;
+            }
+          }
+
+          if (success) {
+            testLlmStatus.innerHTML = `✅ LLM Connection verified successfully!\n   Provider: ${provider}\n   Model: ${finalModel}\n   Key Status: Present (${finalKey.substring(0, 4)}...${finalKey.substring(finalKey.length - 4)})`;
             testLlmStatus.style.borderColor = 'var(--theme-success)';
             testLlmStatus.style.color = 'var(--theme-success)';
           } else {
-            testLlmStatus.textContent = `❌ Backend returned error sync status: ${resp.status} ${resp.statusText}`;
+            testLlmStatus.textContent = `❌ LLM connection test failed: ${errorMessage}`;
             testLlmStatus.style.borderColor = 'var(--theme-danger)';
             testLlmStatus.style.color = 'var(--theme-danger)';
           }
@@ -2180,6 +2264,8 @@ console.log('main.js loaded');
     });
   }
 
+  let selectingTransitive = false;
+
   // === Setup Cytoscape Events ===
   function setupCyEvents() {
     if (!cy) return;
@@ -2189,6 +2275,20 @@ console.log('main.js loaded');
       if (!selectedNodeIds.includes(node.id())) {
         selectedNodeIds.push(node.id());
       }
+
+      // Auto select connecting nodes up to all levels (transitive closure)
+      if (!selectingTransitive) {
+        selectingTransitive = true;
+        try {
+          const predecessors = node.predecessors();
+          const successors = node.successors();
+          predecessors.select();
+          successors.select();
+        } finally {
+          selectingTransitive = false;
+        }
+      }
+
       updateWorkspaceScope();
       if (selectedNodeIds.length === 1) {
         showNodeDetails(node);
@@ -2423,12 +2523,57 @@ console.log('main.js loaded');
     modal.addEventListener('click', (e) => {
       if (e.target === modal) closeRequirementsWorkspace();
     });
+
+    const showMdBtn = document.getElementById('showMdBtn');
+    const showJsonBtn = document.getElementById('showJsonBtn');
+
+    function updateViewMode(mode) {
+      requirementsViewMode = mode;
+      const output = document.getElementById('reqOutput');
+      if (mode === 'markdown') {
+        showMdBtn.style.background = 'var(--theme-primary)';
+        showMdBtn.style.color = 'white';
+        showMdBtn.style.borderColor = 'var(--theme-primary)';
+
+        showJsonBtn.style.background = '';
+        showJsonBtn.style.color = '';
+        showJsonBtn.style.borderColor = '';
+
+        if (requirementsRawMarkdown) {
+          output.textContent = requirementsRawMarkdown;
+        } else {
+          output.innerHTML = '<span style="color:var(--theme-text-dim);">Requirements document will appear here after generation.</span>';
+        }
+      } else {
+        showJsonBtn.style.background = 'var(--theme-primary)';
+        showJsonBtn.style.color = 'white';
+        showJsonBtn.style.borderColor = 'var(--theme-primary)';
+
+        showMdBtn.style.background = '';
+        showMdBtn.style.color = '';
+        showMdBtn.style.borderColor = '';
+
+        if (requirementsJsonTasks) {
+          output.textContent = JSON.stringify(requirementsJsonTasks, null, 2);
+        } else {
+          output.innerHTML = '<span style="color:var(--theme-text-dim);">No JSON data generated yet.</span>';
+        }
+      }
+    }
+
+    if (showMdBtn && showJsonBtn) {
+      showMdBtn.addEventListener('click', () => updateViewMode('markdown'));
+      showJsonBtn.addEventListener('click', () => updateViewMode('json'));
+    }
+
     document.getElementById('generateReqBtn').addEventListener('click', generateRequirements);
     document.getElementById('clearScopeBtn').addEventListener('click', () => {
       if (cy) cy.elements().unselect();
       selectedNodeIds = [];
       updateWorkspaceScope();
-      document.getElementById('reqOutput').textContent = 'Requirements document will appear here after generation.';
+      requirementsRawMarkdown = '';
+      requirementsJsonTasks = null;
+      updateViewMode(requirementsViewMode);
       document.getElementById('matrixBody').innerHTML = `<tr><td colspan="3" style="text-align:center; padding:var(--space-lg); color:var(--theme-text-dim);">No requirements generated yet.</td></tr>`;
       window._generatedReqDoc = null;
     });
@@ -2792,8 +2937,11 @@ console.log('main.js loaded');
         if (data.job_id) {
           subscribeToIngestionStream(data.job_id);
         } else {
+          const resolvedBranch = 'main';
+          const resolvedVersion = data.version || data.commit_sha || data.sha || 'latest';
+          saveSessionAndHistory(resolvedRepoPath, resolvedBranch, resolvedVersion);
           loadGraph();
-          loadBranchesAndCommits();
+          loadBranchesAndCommits(resolvedBranch);
         }
       } catch (e) {
         console.error('Failed to analyze absolute path:', e);
@@ -2844,8 +2992,11 @@ console.log('main.js loaded');
           if (data.job_id) {
             subscribeToIngestionStream(data.job_id);
           } else {
+            const resolvedBranch = (document.getElementById('branchSelector') ? document.getElementById('branchSelector').value : 'main') || 'main';
+            const resolvedVersion = data.version || data.commit_sha || data.sha || service.currentCommitSHA || 'latest';
+            saveSessionAndHistory(repoPath, resolvedBranch, resolvedVersion);
             loadGraph();
-            loadBranchesAndCommits();
+            loadBranchesAndCommits(resolvedBranch);
           }
         } catch (e) {
           console.error('Re-analysis failed:', e);
@@ -2872,6 +3023,9 @@ console.log('main.js loaded');
 
         dashAnalyzeBtn.disabled = true;
         dashAnalyzeBtn.textContent = 'Ingesting...';
+
+        service.demoMode = false;
+        service.graphData = null;
 
         try {
           const timeoutVal = parseInt(localStorage.getItem('code-intel-ingestion-timeout') || '300', 10);
@@ -2982,8 +3136,11 @@ console.log('main.js loaded');
         if (data.job_id) {
           subscribeToIngestionStream(data.job_id);
         } else {
+          const resolvedBranch = branch || 'main';
+          const resolvedVersion = data.version || data.commit_sha || data.sha || 'latest';
+          saveSessionAndHistory(resolvedRepoPath, resolvedBranch, resolvedVersion);
           loadGraph();
-          loadBranchesAndCommits();
+          loadBranchesAndCommits(resolvedBranch);
         }
       } catch (e) {
         console.error('Remote ingestion failed:', e);
@@ -3016,17 +3173,22 @@ console.log('main.js loaded');
     updateRepoSourceInfo();
     renderDashboardAndSidebar();
 
-    // Periodic health check of FastAPI backend (every 10 seconds if offline, 30 seconds if online)
+    // Periodic health check of FastAPI backend (only if offline, to automatically recover)
+    // When connected, we do not poll; safeFetch dynamically detects if the server goes offline.
     let lastHealthCheckTime = Date.now();
     setInterval(async () => {
-      const now = Date.now();
-      const interval = service.connected ? 30000 : 10000;
-      if (now - lastHealthCheckTime < interval) {
+      if (service.connected) {
         return;
       }
 
       // Skip status polling if there's an active SSE ingestion stream
-      if (service.connected && activeEventSource) {
+      if (activeEventSource) {
+        return;
+      }
+
+      const now = Date.now();
+      const interval = 10000; // Poll every 10 seconds only when offline
+      if (now - lastHealthCheckTime < interval) {
         return;
       }
 
@@ -3039,7 +3201,7 @@ console.log('main.js loaded');
           triggerOfflineMode(true);
         }
       } catch (e) {
-        // Remain or transition to offline
+        // Remain offline
         console.warn('Backend health check error:', e.message || e);
         triggerOfflineMode(true);
       }
