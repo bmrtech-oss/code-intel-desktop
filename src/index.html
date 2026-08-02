@@ -50,6 +50,7 @@
         <div class="sidebar-section__actions">
           <button class="sidebar__action-button" id="browseRepoBtn">Browse repo</button>
           <button class="sidebar__action-button" id="demoProjectBtn">Show demo project</button>
+          <button class="sidebar__action-button" id="reanalyzeRepoBtn" style="display: none;">Reanalyze</button>
         </div>
         <!-- Remote Git Ingestion Inputs -->
         <div class="remote-git-section" style="margin-bottom: var(--space-sm); display: flex; flex-direction: column; gap: var(--space-xs);">
@@ -70,6 +71,18 @@
           </div>
         </div>
         <div class="file-tree" id="fileTree"></div>
+
+        <!-- 📋 Analyzed Repositories list -->
+        <div class="analyzed-repos-sidebar" style="margin-top: var(--space-sm); display: flex; flex-direction: column; gap: var(--space-xs);">
+          <div style="font-size: 11px; font-weight: 600; color: var(--theme-text-secondary); display: flex; align-items: center; justify-content: space-between;">
+            <span>📋 Analyzed Repositories</span>
+            <span id="sidebarClearHistoryBtn" style="font-size: 10px; color: var(--theme-danger); cursor: pointer; text-decoration: underline; font-weight: 500;">Clear</span>
+          </div>
+          <div id="sidebarAnalyzedReposList" style="display: flex; flex-direction: column; gap: 4px; max-height: 100px; overflow-y: auto; padding: 4px; border: 1px solid var(--theme-border); border-radius: var(--radius-sm); background: var(--theme-surface-elevated);">
+            <div style="font-size: 10px; color: var(--theme-text-dim); text-align: center; padding: 4px;">No analyzed repos</div>
+          </div>
+        </div>
+
         <div class="sidebar__source-info" id="repoSourceInfo">Source: Demo project</div>
         <input type="file" id="repoFileInput" webkitdirectory directory multiple style="display:none" />
       </section>
@@ -177,6 +190,50 @@
           <div class="graph-viewer__splash-icon">🌐</div>
           <div class="graph-viewer__splash-text">Select a folder or symbol to begin exploring.</div>
         </div>
+
+        <!-- WORKSPACE DASHBOARD VIEW -->
+        <div id="workspaceDashboard" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: var(--theme-bg); z-index: 10; padding: var(--space-xl); display: flex; flex-direction: column; gap: var(--space-lg); overflow-y: auto; box-sizing: border-box;">
+
+          <div style="display: flex; align-items: center; gap: var(--space-sm); border-bottom: 1px solid var(--theme-border); padding-bottom: var(--space-md); margin-bottom: var(--space-xs);">
+            <span style="font-size: 32px;">🌐</span>
+            <div>
+              <h1 style="margin: 0; font-size: 20px; color: var(--theme-text-primary);">Code-Intel Workspace Dashboard</h1>
+              <p style="margin: 2px 0 0 0; font-size: 12px; color: var(--theme-text-dim);">Durable session persistence & recent repositories manager</p>
+            </div>
+          </div>
+
+          <!-- New Analysis Section -->
+          <div style="background: var(--theme-surface); border: 1px solid var(--theme-border); border-radius: var(--radius-md); padding: var(--space-md); display: flex; flex-direction: column; gap: var(--space-sm);">
+            <h2 style="margin: 0; font-size: 14px; font-weight: 600; color: var(--theme-text-primary); display: flex; align-items: center; gap: 6px;">🚀 New Analysis Ingestion</h2>
+            <div style="display: flex; flex-direction: column; gap: var(--space-xs);">
+              <label style="font-size: 11px; font-weight: 600; color: var(--theme-text-secondary);">Repository Path / Git URL</label>
+              <input type="text" id="dashboardRepoInput" placeholder="Enter remote HTTPS/SSH URL or local directory absolute path" style="font-size: 12px; padding: 8px var(--space-sm); border: 1px solid var(--theme-border); border-radius: var(--radius-sm); background: var(--theme-surface-elevated); color: var(--theme-text-primary); outline: none; width: 100%; box-sizing: border-box;" />
+            </div>
+            <div style="display: flex; gap: var(--space-md);">
+              <div style="flex: 1; display: flex; flex-direction: column; gap: var(--space-xs);">
+                <label style="font-size: 11px; font-weight: 600; color: var(--theme-text-secondary);">Branch (optional)</label>
+                <input type="text" id="dashboardBranchInput" placeholder="main" style="font-size: 12px; padding: 8px var(--space-sm); border: 1px solid var(--theme-border); border-radius: var(--radius-sm); background: var(--theme-surface-elevated); color: var(--theme-text-primary); outline: none; width: 100%; box-sizing: border-box;" />
+              </div>
+              <div style="display: flex; align-items: flex-end;">
+                <button class="sidebar__action-button" id="dashboardAnalyzeBtn" style="padding: 0 var(--space-md); font-weight: 600; font-size: 12px; height: 32px; border: 1px solid var(--theme-border); border-radius: var(--radius-sm); background: var(--theme-primary); color: white; cursor: pointer;">Analyze & Load</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Recent Repositories Section -->
+          <div style="display: flex; flex-direction: column; gap: var(--space-sm);">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <h2 style="margin: 0; font-size: 14px; font-weight: 600; color: var(--theme-text-primary); display: flex; align-items: center; gap: 6px;">📂 Recent Repositories & Historical Runs</h2>
+              <button class="sidebar__action-button" id="dashboardClearHistoryBtn" style="font-size: 10px; padding: 2px 8px; background: var(--theme-danger); border-color: var(--theme-danger); color: white; cursor: pointer; font-weight: 600;">🗑️ Clear Run History</button>
+            </div>
+            <div id="dashboardRecentRunsList" style="display: flex; flex-direction: column; gap: var(--space-md);">
+              <!-- Dynamically populated runs list -->
+              <div style="padding: var(--space-lg); text-align: center; color: var(--theme-text-dim); background: var(--theme-surface); border: 1px dashed var(--theme-border); border-radius: var(--radius-md); font-size: 12px;">No historical runs found. Analyze a new repository above to begin!</div>
+            </div>
+          </div>
+
+        </div>
+
         <div class="graph-controls">
           <button class="graph-controls__button" id="zoomInBtn" title="Zoom In">＋</button>
           <button class="graph-controls__button" id="zoomOutBtn" title="Zoom Out">−</button>
@@ -294,6 +351,11 @@
           <input type="password" id="settingsApiKey" placeholder="Enter your API key" />
           <div class="modal__status" id="settingsKeyStatus">Key not saved</div>
         </div>
+        <div class="modal__field">
+          <label for="settingsTimeout">Ingestion Timeout (seconds)</label>
+          <input type="number" id="settingsTimeout" placeholder="e.g. 300" min="10" value="300" />
+          <div class="modal__help">Maximum time allowed for background cloning & parsing tasks (defaults to 300 seconds / 5 minutes).</div>
+        </div>
 
         <!-- Connection Test Block -->
         <div class="modal__field" style="border-top: 1px solid var(--theme-border); padding-top: var(--space-md); margin-top: var(--space-xs);">
@@ -302,6 +364,15 @@
             <button class="modal__button" id="settingsTestBtn" style="padding: 2px 8px; font-size: 11px;">🔌 Test Connection</button>
           </div>
           <div id="settingsTestStatus" class="modal__status" style="padding: var(--space-sm); border-radius: var(--radius-sm); border: 1px dashed var(--theme-border); background: var(--theme-surface); font-family: var(--font-mono); font-size: 11px; white-space: pre-wrap; line-height: 1.4;">Ready to test. Click "Test Connection" to run diagnostics.</div>
+        </div>
+
+        <!-- LLM Connection Test Block -->
+        <div class="modal__field" style="border-top: 1px solid var(--theme-border); padding-top: var(--space-md); margin-top: var(--space-xs);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-xs);">
+            <label style="margin-bottom: 0;">LLM Connection Diagnostics</label>
+            <button class="modal__button" id="settingsTestLlmBtn" style="padding: 2px 8px; font-size: 11px;">🔌 Test LLM Connection</button>
+          </div>
+          <div id="settingsLlmTestStatus" class="modal__status" style="padding: var(--space-sm); border-radius: var(--radius-sm); border: 1px dashed var(--theme-border); background: var(--theme-surface); font-family: var(--font-mono); font-size: 11px; white-space: pre-wrap; line-height: 1.4;">Ready to test. Click "Test LLM Connection" to sync credentials & run pre-flight tests.</div>
         </div>
 
         <div class="modal__actions">
@@ -339,9 +410,11 @@
           <div class="workspace-panel workspace-panel--right">
             <div class="workspace-panel__label">
               <span>Generated Requirements</span>
-              <div class="workspace-actions">
+              <div class="workspace-actions" style="display: flex; gap: var(--space-xs); align-items: center;">
+                <button class="modal__button" id="showMdBtn" style="padding: 2px 6px; font-size: 11px; background: var(--theme-primary); color: white; border-color: var(--theme-primary);">📄 Show MD</button>
+                <button class="modal__button" id="showJsonBtn" style="padding: 2px 6px; font-size: 11px;">⚙️ Show JSON</button>
                 <button class="modal__button" id="copyReqBtn">📋 Copy</button>
-                <button class="modal__button" id="downloadReqBtn">⬇️ Download</button>
+                <button class="modal__button" id="downloadReqBtn">⬇️ Download MD</button>
               </div>
             </div>
             <div class="workspace-panel__content workspace-panel__content--code" id="reqOutput">
