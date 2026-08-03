@@ -164,7 +164,7 @@ body { font-family: var(--font-family); background: var(--theme-bg); color: var(
 .resizable-section {
   resize: vertical;
   overflow: auto;
-  min-height: 100px;
+  min-height: 60px;
 }
 .sidebar-section__title { color: var(--theme-text-secondary); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-bottom: var(--space-sm); }
 .sidebar-section__actions { display:flex; gap:var(--space-xs); flex-wrap: wrap; margin-bottom: var(--space-sm); }
