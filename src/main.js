@@ -27,6 +27,7 @@ console.log('main.js loaded');
     const current = document.documentElement.getAttribute('data-theme') || 'dark';
     const next = current === 'dark' ? 'light' : 'dark';
     setTheme(next);
+    loadGraph();
   };
   const updateUI = (theme) => {
     const icon = document.getElementById('themeIcon');
@@ -937,6 +938,40 @@ console.log('main.js loaded');
     });
   }
 
+  function getColorForType(type) {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const colors = {
+      light: {
+        'function': '#2da44e',
+        'class': '#0969da',
+        'module': '#8250df',
+        'file': '#6e7781',
+        'directory': '#6e7781',
+        'folder': '#6e7781',
+        'variable': '#cf222e',
+        'enum': '#953b00',
+        'edge-call': '#0969da',
+        'edge-import': '#d46003',
+        'symbol': '#6e7781'
+      },
+      dark: {
+        'function': '#3fb950',
+        'class': '#58a6ff',
+        'module': '#bc8cff',
+        'file': '#8b949e',
+        'directory': '#8b949e',
+        'folder': '#8b949e',
+        'variable': '#ff7b72',
+        'enum': '#f0883e',
+        'edge-call': '#58a6ff',
+        'edge-import': '#ff9e3b',
+        'symbol': '#8b949e'
+      }
+    };
+    const themeColors = isDark ? colors.dark : colors.light;
+    return themeColors[type] || themeColors['symbol'];
+  }
+
   // === Load File Graph ===
   async function loadFileGraph(commitSHA) {
     const sha = commitSHA || service.currentCommitSHA || 'latest';
@@ -995,16 +1030,28 @@ console.log('main.js loaded');
         container: document.getElementById('cy'),
         elements: {
           nodes: fileNodes.map(n => ({
-            data: { id: n.id, label: n.label, type: n.type, name: n.label },
-            style: { 'background-color': `var(--node-${n.type})`, 'border-color': `var(--node-${n.type})` }
+            data: {
+              id: n.id,
+              label: n.label,
+              type: n.type,
+              name: n.label,
+              bgColor: getColorForType(n.type),
+              borderColor: getColorForType(n.type)
+            }
           })),
-          edges: fileEdges.map(e => ({ data: { ...e, id: e.source + '-' + e.target } }))
+          edges: fileEdges.map(e => ({
+            data: {
+              ...e,
+              id: e.source + '-' + e.target,
+              edgeColor: getColorForType(e.type === 'imports' ? 'edge-import' : 'edge-call')
+            }
+          }))
         },
         style: [
-          { selector: 'node', style: { 'width': '36px', 'height': '36px', 'border-width': 2, 'border-color': 'data(border-color)', 'border-opacity': 0.8, 'label': 'data(label)', 'font-size': '11px', 'font-family': "'Inter', -apple-system, sans-serif", 'color': isDark ? '#F0F6FC' : '#1F2328', 'text-valign': 'bottom', 'text-halign': 'center', 'text-outline-width': 2, 'text-outline-color': isDark ? '#0D1117' : '#FFFFFF', 'text-outline-opacity': 1, 'text-margin-y': 6, 'text-wrap': 'wrap', 'text-max-width': '60px' } },
+          { selector: 'node', style: { 'width': '36px', 'height': '36px', 'background-color': 'data(bgColor)', 'border-width': 2, 'border-color': 'data(borderColor)', 'border-opacity': 0.8, 'label': 'data(label)', 'font-size': '11px', 'font-family': "'Inter', -apple-system, sans-serif", 'color': isDark ? '#F0F6FC' : '#1F2328', 'text-valign': 'bottom', 'text-halign': 'center', 'text-outline-width': 2, 'text-outline-color': isDark ? '#0D1117' : '#FFFFFF', 'text-outline-opacity': 1, 'text-margin-y': 6, 'text-wrap': 'wrap', 'text-max-width': '60px' } },
           { selector: 'node:selected', style: { 'border-width': 4, 'border-color': 'var(--theme-primary)', 'border-opacity': 1, 'width': '44px', 'height': '44px', 'background-opacity': 0.9 } },
-          { selector: 'edge', style: { 'width': 2, 'line-color': 'var(--edge-call)', 'target-arrow-color': 'var(--edge-call)', 'target-arrow-shape': 'triangle', 'source-arrow-shape': 'none', 'arrow-scale': 1.2, 'curve-style': 'bezier', 'label': 'data(type)', 'font-size': '9px', 'font-family': "'Inter', sans-serif", 'color': isDark ? '#8B949E' : '#656D76', 'text-outline-width': 1, 'text-outline-color': isDark ? '#0D1117' : '#FFFFFF', 'text-margin-y': -6, 'control-point-distance': 20, 'control-point-weight': 0.5 } },
-          { selector: 'edge[type="imports"]', style: { 'line-style': 'dashed', 'line-color': 'var(--edge-import)', 'target-arrow-color': 'var(--edge-import)', 'width': 1.5 } }
+          { selector: 'edge', style: { 'width': 2, 'line-color': 'data(edgeColor)', 'target-arrow-color': 'data(edgeColor)', 'target-arrow-shape': 'triangle', 'source-arrow-shape': 'none', 'arrow-scale': 1.2, 'curve-style': 'bezier', 'label': 'data(type)', 'font-size': '9px', 'font-family': "'Inter', sans-serif", 'color': isDark ? '#8B949E' : '#656D76', 'text-outline-width': 1, 'text-outline-color': isDark ? '#0D1117' : '#FFFFFF', 'text-margin-y': -6, 'control-point-distance': 20, 'control-point-weight': 0.5 } },
+          { selector: 'edge[type="imports"]', style: { 'line-style': 'dashed', 'line-color': 'data(edgeColor)', 'target-arrow-color': 'data(edgeColor)', 'width': 1.5 } }
         ],
         layout: {
           name: 'concentric',
@@ -1669,6 +1716,22 @@ console.log('main.js loaded');
       if (!selectedNodeIds.includes(node.id())) {
         selectedNodeIds.push(node.id());
       }
+
+      // Automatically select direct neighbors
+      if (!window._selectingNeighbors) {
+        window._selectingNeighbors = true;
+        try {
+          node.neighborhood('node').forEach(neighbor => {
+            neighbor.select();
+            if (!selectedNodeIds.includes(neighbor.id())) {
+              selectedNodeIds.push(neighbor.id());
+            }
+          });
+        } finally {
+          window._selectingNeighbors = false;
+        }
+      }
+
       updateWorkspaceScope();
       if (selectedNodeIds.length === 1) {
         showNodeDetails(node);
@@ -1860,16 +1923,28 @@ console.log('main.js loaded');
       container: document.getElementById('cy'),
       elements: {
         nodes: graph.nodes.map(n => ({
-          data: { id: n.id, label: n.label, type: n.type, name: n.label },
-          style: { 'background-color': `var(--node-${n.type})`, 'border-color': `var(--node-${n.type})` }
+          data: {
+            id: n.id,
+            label: n.label,
+            type: n.type,
+            name: n.label,
+            bgColor: getColorForType(n.type),
+            borderColor: getColorForType(n.type)
+          }
         })),
-        edges: graph.edges.map(e => ({ data: { ...e, id: e.source + '-' + e.target } }))
+        edges: graph.edges.map(e => ({
+          data: {
+            ...e,
+            id: e.source + '-' + e.target,
+            edgeColor: getColorForType(e.type === 'imports' ? 'edge-import' : 'edge-call')
+          }
+        }))
       },
       style: [
-        { selector: 'node', style: { 'width': '36px', 'height': '36px', 'border-width': 2, 'border-color': 'data(border-color)', 'border-opacity': 0.8, 'label': 'data(label)', 'font-size': '11px', 'font-family': "'Inter', -apple-system, sans-serif", 'color': isDark ? '#F0F6FC' : '#1F2328', 'text-valign': 'bottom', 'text-halign': 'center', 'text-outline-width': 2, 'text-outline-color': isDark ? '#0D1117' : '#FFFFFF', 'text-outline-opacity': 1, 'text-margin-y': 6, 'text-wrap': 'wrap', 'text-max-width': '60px' } },
+        { selector: 'node', style: { 'width': '36px', 'height': '36px', 'background-color': 'data(bgColor)', 'border-width': 2, 'border-color': 'data(borderColor)', 'border-opacity': 0.8, 'label': 'data(label)', 'font-size': '11px', 'font-family': "'Inter', -apple-system, sans-serif", 'color': isDark ? '#F0F6FC' : '#1F2328', 'text-valign': 'bottom', 'text-halign': 'center', 'text-outline-width': 2, 'text-outline-color': isDark ? '#0D1117' : '#FFFFFF', 'text-outline-opacity': 1, 'text-margin-y': 6, 'text-wrap': 'wrap', 'text-max-width': '60px' } },
         { selector: 'node:selected', style: { 'border-width': 4, 'border-color': 'var(--theme-primary)', 'border-opacity': 1, 'width': '44px', 'height': '44px', 'background-opacity': 0.9 } },
-        { selector: 'edge', style: { 'width': 2, 'line-color': 'var(--edge-call)', 'target-arrow-color': 'var(--edge-call)', 'target-arrow-shape': 'triangle', 'source-arrow-shape': 'none', 'arrow-scale': 1.2, 'curve-style': 'bezier', 'label': 'data(type)', 'font-size': '9px', 'font-family': "'Inter', sans-serif", 'color': isDark ? '#8B949E' : '#656D76', 'text-outline-width': 1, 'text-outline-color': isDark ? '#0D1117' : '#FFFFFF', 'text-margin-y': -6, 'control-point-distance': 20, 'control-point-weight': 0.5 } },
-        { selector: 'edge[type="imports"]', style: { 'line-style': 'dashed', 'line-color': 'var(--edge-import)', 'target-arrow-color': 'var(--edge-import)', 'width': 1.5 } }
+        { selector: 'edge', style: { 'width': 2, 'line-color': 'data(edgeColor)', 'target-arrow-color': 'data(edgeColor)', 'target-arrow-shape': 'triangle', 'source-arrow-shape': 'none', 'arrow-scale': 1.2, 'curve-style': 'bezier', 'label': 'data(type)', 'font-size': '9px', 'font-family': "'Inter', sans-serif", 'color': isDark ? '#8B949E' : '#656D76', 'text-outline-width': 1, 'text-outline-color': isDark ? '#0D1117' : '#FFFFFF', 'text-margin-y': -6, 'control-point-distance': 20, 'control-point-weight': 0.5 } },
+        { selector: 'edge[type="imports"]', style: { 'line-style': 'dashed', 'line-color': 'data(edgeColor)', 'target-arrow-color': 'data(edgeColor)', 'width': 1.5 } }
       ],
       layout: { name: 'cose', idealEdgeLength: 100, nodeRepulsion: 8000, nestingFactor: 1.2, gravity: 0.3, numIter: 1000, refresh: 20, fit: true, padding: 40 },
       userZoomingEnabled: true,
