@@ -187,58 +187,75 @@ console.log('main.js loaded');
     }
 
     getDemoGraphData() {
-      return {
-        nodes: [
-          { id: 'n1', label: 'AuthService', type: 'class' },
-          { id: 'n2', label: 'login', type: 'function' },
-          { id: 'n3', label: 'validateUser', type: 'function' },
-          { id: 'n4', label: 'hashPassword', type: 'function' },
-          { id: 'n5', label: 'UserRepository', type: 'class' },
-          { id: 'n6', label: 'findByEmail', type: 'function' },
-          { id: 'n7', label: 'DatabaseConnection', type: 'class' },
-          { id: 'n8', label: 'query', type: 'function' },
-          { id: 'n9', label: 'Logger', type: 'class' },
-          { id: 'n10', label: 'log', type: 'function' },
-          { id: 'n11', label: 'ConfigService', type: 'class' },
-          { id: 'n12', label: 'getSecret', type: 'function' },
-          { id: 'n13', label: 'TokenService', type: 'class' },
-          { id: 'n14', label: 'generateToken', type: 'function' },
-          { id: 'n15', label: 'verifyToken', type: 'function' },
-          { id: 'n16', label: 'EmailService', type: 'class' },
-          { id: 'n17', label: 'sendWelcome', type: 'function' },
-          { id: 'n18', label: 'User', type: 'class' },
-          { id: 'n19', label: 'Role', type: 'enum' },
-          { id: 'n20', label: 'main', type: 'function' },
-        ],
-        edges: [
-          { source: 'n2', target: 'n3', type: 'calls' },
-          { source: 'n2', target: 'n4', type: 'calls' },
-          { source: 'n2', target: 'n5', type: 'calls' },
-          { source: 'n3', target: 'n6', type: 'calls' },
-          { source: 'n3', target: 'n18', type: 'calls' },
-          { source: 'n6', target: 'n7', type: 'calls' },
-          { source: 'n6', target: 'n8', type: 'calls' },
-          { source: 'n5', target: 'n7', type: 'calls' },
-          { source: 'n1', target: 'n9', type: 'calls' },
-          { source: 'n1', target: 'n11', type: 'calls' },
-          { source: 'n1', target: 'n13', type: 'calls' },
-          { source: 'n14', target: 'n12', type: 'calls' },
-          { source: 'n14', target: 'n10', type: 'calls' },
-          { source: 'n15', target: 'n12', type: 'calls' },
-          { source: 'n16', target: 'n17', type: 'calls' },
-          { source: 'n17', target: 'n10', type: 'calls' },
-          { source: 'n20', target: 'n1', type: 'calls' },
-          { source: 'n20', target: 'n16', type: 'calls' },
-          { source: 'n20', target: 'n14', type: 'calls' },
-          { source: 'n2', target: 'n1', type: 'imports' },
-          { source: 'n3', target: 'n5', type: 'imports' },
-          { source: 'n6', target: 'n7', type: 'imports' },
-          { source: 'n14', target: 'n11', type: 'imports' },
-          { source: 'n17', target: 'n9', type: 'imports' },
-          { source: 'n5', target: 'n18', type: 'imports' },
-          { source: 'n1', target: 'n18', type: 'imports' },
-        ]
-      };
+      const allNodes = [
+        { id: 'n1', label: 'AuthService', type: 'class' },
+        { id: 'n2', label: 'login', type: 'function' },
+        { id: 'n3', label: 'validateUser', type: 'function' },
+        { id: 'n4', label: 'hashPassword', type: 'function' },
+        { id: 'n5', label: 'UserRepository', type: 'class' },
+        { id: 'n6', label: 'findByEmail', type: 'function' },
+        { id: 'n7', label: 'DatabaseConnection', type: 'class' },
+        { id: 'n8', label: 'query', type: 'function' },
+        { id: 'n9', label: 'Logger', type: 'class' },
+        { id: 'n10', label: 'log', type: 'function' },
+        { id: 'n11', label: 'ConfigService', type: 'class' },
+        { id: 'n12', label: 'getSecret', type: 'function' },
+        { id: 'n13', label: 'TokenService', type: 'class' },
+        { id: 'n14', label: 'generateToken', type: 'function' },
+        { id: 'n15', label: 'verifyToken', type: 'function' },
+        { id: 'n16', label: 'EmailService', type: 'class' },
+        { id: 'n17', label: 'sendWelcome', type: 'function' },
+        { id: 'n18', label: 'User', type: 'class' },
+        { id: 'n19', label: 'Role', type: 'enum' },
+        { id: 'n20', label: 'main', type: 'function' },
+      ];
+
+      const allEdges = [
+        { source: 'n2', target: 'n3', type: 'calls' },
+        { source: 'n2', target: 'n4', type: 'calls' },
+        { source: 'n2', target: 'n5', type: 'calls' },
+        { source: 'n3', target: 'n6', type: 'calls' },
+        { source: 'n3', target: 'n18', type: 'calls' },
+        { source: 'n6', target: 'n7', type: 'calls' },
+        { source: 'n6', target: 'n8', type: 'calls' },
+        { source: 'n5', target: 'n7', type: 'calls' },
+        { source: 'n1', target: 'n9', type: 'calls' },
+        { source: 'n1', target: 'n11', type: 'calls' },
+        { source: 'n1', target: 'n13', type: 'calls' },
+        { source: 'n14', target: 'n12', type: 'calls' },
+        { source: 'n14', target: 'n10', type: 'calls' },
+        { source: 'n15', target: 'n12', type: 'calls' },
+        { source: 'n16', target: 'n17', type: 'calls' },
+        { source: 'n17', target: 'n10', type: 'calls' },
+        { source: 'n20', target: 'n1', type: 'calls' },
+        { source: 'n20', target: 'n16', type: 'calls' },
+        { source: 'n20', target: 'n14', type: 'calls' },
+        { source: 'n2', target: 'n1', type: 'imports' },
+        { source: 'n3', target: 'n5', type: 'imports' },
+        { source: 'n6', target: 'n7', type: 'imports' },
+        { source: 'n14', target: 'n11', type: 'imports' },
+        { source: 'n17', target: 'n9', type: 'imports' },
+        { source: 'n5', target: 'n18', type: 'imports' },
+        { source: 'n1', target: 'n18', type: 'imports' },
+      ];
+
+      // Filter based on selected mock commit
+      let visibleNodeIds = new Set();
+      const sha = this.currentCommitSHA;
+      if (!sha || sha === 'c333333333333333333333333333333333333333') {
+        allNodes.forEach(n => visibleNodeIds.add(n.id));
+      } else if (sha === 'c222222222222222222222222222222222222222') {
+        const ids = ['n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7', 'n8', 'n9', 'n10', 'n11', 'n12', 'n13', 'n14', 'n15', 'n18'];
+        ids.forEach(id => visibleNodeIds.add(id));
+      } else {
+        const ids = ['n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7', 'n8', 'n18'];
+        ids.forEach(id => visibleNodeIds.add(id));
+      }
+
+      const nodes = allNodes.filter(n => visibleNodeIds.has(n.id));
+      const edges = allEdges.filter(e => visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target));
+
+      return { nodes, edges };
     }
 
     // === MCP Discovery ===
@@ -409,12 +426,80 @@ console.log('main.js loaded');
   }
 
   async function loadBranchesAndCommits() {
-    if (!currentRepoSource || service.demoMode) {
+    const branchSelector = document.getElementById('branchSelector');
+    const commitTimelineRail = document.getElementById('commitTimelineRail');
+
+    if (service.demoMode) {
+      const branches = ['main', 'dev'];
+      const commits = [
+        { sha: 'c333333333333333333333333333333333333333', date: '2026-07-27T14:30:00Z', author: 'Charlie', msg: 'Add Email Service and Main' },
+        { sha: 'c222222222222222222222222222222222222222', date: '2026-07-20T10:15:00Z', author: 'Bob', msg: 'Add Config and Token Services' },
+        { sha: 'c111111111111111111111111111111111111111', date: '2026-07-10T09:00:00Z', author: 'Alice', msg: 'Initial Commit' }
+      ];
+
+      currentTimelineCommits = commits;
+
+      // 1. Populate branch dropdown
+      if (branchSelector) {
+        branchSelector.innerHTML = branches.map(b => `<option value="${b}">${b}</option>`).join('');
+      }
+
+      // 2. Populate commit timeline rail
+      if (commitTimelineRail) {
+        commitTimelineRail.innerHTML = commits.map(c => {
+          const shortSha = c.sha.substring(0, 7);
+          const author = c.author;
+          const dateStr = new Date(c.date).toLocaleString();
+          const borderStyle = service.currentCommitSHA === c.sha ? 'var(--theme-primary)' : 'var(--theme-border)';
+          const bgStyle = service.currentCommitSHA === c.sha ? 'var(--theme-surface)' : 'var(--theme-surface-elevated)';
+          return `
+            <div class="commit-card" data-sha="${c.sha}" style="padding: var(--space-sm); border: 1px solid ${borderStyle}; border-radius: var(--radius-sm); background: ${bgStyle}; cursor: pointer; transition: all 150ms ease; display: flex; flex-direction: column; gap: 2px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; pointer-events: none;">
+                <span style="font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--theme-primary);">${shortSha}</span>
+                <span style="font-size: 10px; color: var(--theme-text-dim);">${dateStr}</span>
+              </div>
+              <div style="font-size: 11px; font-weight: 500; color: var(--theme-text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap; pointer-events: none;">by ${author}</div>
+              <div style="font-size: 10px; color: var(--theme-text-secondary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap; pointer-events: none;">${c.msg}</div>
+            </div>
+          `;
+        }).join('');
+
+        // 3. Bind click listeners to commit cards
+        commitTimelineRail.querySelectorAll('.commit-card').forEach(card => {
+          card.addEventListener('click', () => {
+            commitTimelineRail.querySelectorAll('.commit-card').forEach(cc => {
+              cc.style.borderColor = 'var(--theme-border)';
+              cc.style.background = 'var(--theme-surface-elevated)';
+            });
+            card.style.borderColor = 'var(--theme-primary)';
+            card.style.background = 'var(--theme-surface)';
+
+            const sha = card.dataset.sha;
+            console.log(`Demo commit card clicked. Selecting SHA: ${sha}`);
+            service.currentCommitSHA = sha;
+
+            // Update time slider UI to match selection
+            updateTimeSliderUI();
+
+            // Update rule evolution highlights
+            updateRuleEvolutionHighlights();
+
+            // Trigger graph load
+            loadGraph();
+          });
+        });
+      }
+
+      if (!service.currentCommitSHA) {
+        service.currentCommitSHA = commits[0].sha;
+      }
+      updateTimeSliderUI();
       return;
     }
 
-    const branchSelector = document.getElementById('branchSelector');
-    const commitTimelineRail = document.getElementById('commitTimelineRail');
+    if (!currentRepoSource) {
+      return;
+    }
 
     console.log(`loadBranchesAndCommits: Fetching for ${currentRepoSource}`);
 
@@ -576,22 +661,23 @@ console.log('main.js loaded');
     currentRepoTree = null;
     currentRepoSource = 'Demo project';
     service.demoMode = true;
+    service.currentCommitSHA = 'c333333333333333333333333333333333333333';
     service.graphData = null;
     updateRepoSourceInfo();
+    loadBranchesAndCommits();
     loadGraph();
-    updateTimeSliderUI();
   }
 
   // === Rule Evolution Database & Logic ===
   const mockRuleDnaDb = {
     'n2': [
-      { sha: 'latest', date: '2026-07-27', ruleText: 'RateLimit: 5 requests/min', desc: 'Added aggressive rate limiting rule to prevent brute-force login attempts.' },
-      { sha: '957c1c57290ad39cba9f4a6d68cb804601d6f76e', date: '2026-07-25', ruleText: 'RateLimit: 10 requests/min', desc: 'Configured transient token verification and basic endpoint rules.' },
-      { sha: 'def5678', date: '2026-07-10', ruleText: 'RateLimit: Disabled', desc: 'Initial implementation of basic authentication lookup rules.' }
+      { sha: 'c333333333333333333333333333333333333333', date: '2026-07-27', ruleText: 'RateLimit: 5 requests/min', desc: 'Added aggressive rate limiting rule to prevent brute-force login attempts.' },
+      { sha: 'c222222222222222222222222222222222222222', date: '2026-07-20', ruleText: 'RateLimit: 10 requests/min', desc: 'Configured transient token verification and basic endpoint rules.' },
+      { sha: 'c111111111111111111111111111111111111111', date: '2026-07-10', ruleText: 'RateLimit: Disabled', desc: 'Initial implementation of basic authentication lookup rules.' }
     ],
     'n14': [
-      { sha: 'latest', date: '2026-07-26', ruleText: 'TokenTTL: 15 minutes', desc: 'Shortened token lifespan to match strict enterprise compliance standards.' },
-      { sha: 'def5678', date: '2026-07-05', ruleText: 'TokenTTL: 60 minutes', desc: 'Initial signature validation rules for JWT generation.' }
+      { sha: 'c333333333333333333333333333333333333333', date: '2026-07-27', ruleText: 'TokenTTL: 15 minutes', desc: 'Shortened token lifespan to match strict enterprise compliance standards.' },
+      { sha: 'c222222222222222222222222222222222222222', date: '2026-07-20', ruleText: 'TokenTTL: 60 minutes', desc: 'Initial signature validation rules for JWT generation.' }
     ]
   };
 
@@ -601,13 +687,13 @@ console.log('main.js loaded');
     }
     return [
       {
-        sha: service.currentCommitSHA || 'latest',
+        sha: 'c333333333333333333333333333333333333333',
         date: '2026-07-27',
         ruleText: `Active Rules: ${nodeLabel} config standards v1.2`,
         desc: `Verified and refactored business rules mapping within ${nodeLabel}.`
       },
       {
-        sha: '957c1c57290ad39cba9f4a6d68cb804601d6f76e',
+        sha: 'c222222222222222222222222222222222222222',
         date: '2026-07-20',
         ruleText: `Active Rules: ${nodeLabel} legacy setup v1.0`,
         desc: 'Initial migration of modular rules from legacy repository structure.'
@@ -1087,7 +1173,15 @@ console.log('main.js loaded');
     if (currentRepoTree) {
       container.innerHTML = renderTree(currentRepoTree, 0);
     } else {
-      const folderMap = { 'auth': ['n1', 'n13'], 'user': ['n5', 'n18'], 'utils': ['n9', 'n11'], 'db': ['n7'], 'email': ['n16'], 'root': ['n20'] };
+      let folderMap = { 'auth': ['n1'], 'user': ['n5', 'n18'], 'db': ['n7'] };
+      const sha = service.currentCommitSHA;
+
+      if (!sha || sha === 'c333333333333333333333333333333333333333') {
+        folderMap = { 'auth': ['n1', 'n13'], 'user': ['n5', 'n18'], 'utils': ['n9', 'n11'], 'db': ['n7'], 'email': ['n16'], 'root': ['n20'] };
+      } else if (sha === 'c222222222222222222222222222222222222222') {
+        folderMap = { 'auth': ['n1', 'n13'], 'user': ['n5', 'n18'], 'utils': ['n9', 'n11'], 'db': ['n7'] };
+      }
+
       let html = '';
       html += `<div class="file-tree__item file-tree__item--folder" style="padding-left:8px;"><span class="file-tree__toggle file-tree__toggle--expanded" data-folder-name="src">▶</span><span class="file-tree__icon">📂</span><span>src</span></div>`;
       html += `<div class="file-tree__children" data-folder-children="src">`;
