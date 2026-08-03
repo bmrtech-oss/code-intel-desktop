@@ -279,6 +279,36 @@ console.log('main.js loaded');
   let currentRepoTree = null;
   let currentRepoSource = 'Demo project';
   let activeEventSource = null;
+  let currentTimelineCommits = [];
+
+  function updateTimeSliderUI() {
+    const container = document.getElementById('timeSliderContainer');
+    const slider = document.getElementById('graphTimeSlider');
+    const dateEl = document.getElementById('sliderCommitDate');
+    const shaEl = document.getElementById('sliderCommitSha');
+
+    if (!container || !slider) return;
+
+    if (service.demoMode || !currentTimelineCommits || currentTimelineCommits.length === 0) {
+      container.style.display = 'none';
+      return;
+    }
+
+    container.style.display = 'flex';
+    slider.min = 0;
+    slider.max = currentTimelineCommits.length - 1;
+
+    let idx = currentTimelineCommits.findIndex(c => c.sha === service.currentCommitSHA);
+    if (idx === -1) idx = 0;
+
+    slider.value = idx;
+
+    const currentCommit = currentTimelineCommits[idx];
+    if (currentCommit) {
+      if (dateEl) dateEl.textContent = currentCommit.date ? new Date(currentCommit.date).toLocaleString() : 'No date';
+      if (shaEl) shaEl.textContent = currentCommit.sha ? currentCommit.sha.substring(0, 7) : '—';
+    }
+  }
 
   function subscribeToIngestionStream(jobId) {
     if (!jobId) {
@@ -394,6 +424,8 @@ console.log('main.js loaded');
       const branches = data.branches || [];
       const commits = data.commits || [];
 
+      currentTimelineCommits = commits;
+
       // 1. Populate branch dropdown
       if (branchSelector) {
         branchSelector.innerHTML = branches.map(b => `<option value="${b}">${b}</option>`).join('');
@@ -433,6 +465,9 @@ console.log('main.js loaded');
               console.log(`Commit card clicked. Selecting SHA: ${sha}`);
               service.currentCommitSHA = sha;
 
+              // Update time slider UI to match selection
+              updateTimeSliderUI();
+
               // Trigger graph load and versioned file tree load
               loadGraph();
               loadVersionedFileTree(sha);
@@ -446,6 +481,8 @@ console.log('main.js loaded');
           service.currentCommitSHA = latestSHA;
           loadVersionedFileTree(latestSHA);
         }
+
+        updateTimeSliderUI();
       }
     } catch (e) {
       console.warn('Failed to load branches and commits:', e);
@@ -539,6 +576,7 @@ console.log('main.js loaded');
     service.graphData = null;
     updateRepoSourceInfo();
     loadGraph();
+    updateTimeSliderUI();
   }
 
   // === Details Panel Functions ===
@@ -1828,6 +1866,40 @@ console.log('main.js loaded');
         setTheme(e.matches ? 'dark' : 'light');
       }
     });
+
+    const graphTimeSlider = document.getElementById('graphTimeSlider');
+    if (graphTimeSlider) {
+      graphTimeSlider.addEventListener('input', (e) => {
+        const idx = parseInt(e.target.value, 10);
+        const selected = currentTimelineCommits[idx];
+        if (selected) {
+          console.log(`Selected commit SHA (from slider): ${selected.sha}`);
+          service.currentCommitSHA = selected.sha;
+
+          const commitTimelineRail = document.getElementById('commitTimelineRail');
+          if (commitTimelineRail) {
+            commitTimelineRail.querySelectorAll('.commit-card').forEach(cc => {
+              if (cc.dataset.sha === selected.sha) {
+                cc.style.borderColor = 'var(--theme-primary)';
+                cc.style.background = 'var(--theme-surface)';
+                cc.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+              } else {
+                cc.style.borderColor = 'var(--theme-border)';
+                cc.style.background = 'var(--theme-surface-elevated)';
+              }
+            });
+          }
+
+          const dateEl = document.getElementById('sliderCommitDate');
+          const shaEl = document.getElementById('sliderCommitSha');
+          if (dateEl) dateEl.textContent = selected.date ? new Date(selected.date).toLocaleString() : 'No date';
+          if (shaEl) shaEl.textContent = selected.sha ? selected.sha.substring(0, 7) : '—';
+
+          loadGraph();
+          loadVersionedFileTree(selected.sha);
+        }
+      });
+    }
 
     // Wire up offline banner action buttons
     const offlineRetryBtn = document.getElementById('offlineRetryBtn');

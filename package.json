@@ -8,6 +8,7 @@
   "devDependencies": {
     "@tauri-apps/cli": "^2.0.0",
     "@types/node": "^26.1.2",
+    "@types/react": "^19.2.18",
     "typescript": "^7.0.2"
   },
   "dependencies": {

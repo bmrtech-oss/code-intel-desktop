@@ -177,6 +177,16 @@
           <div class="graph-viewer__splash-icon">🌐</div>
           <div class="graph-viewer__splash-text">Select a folder or symbol to begin exploring.</div>
         </div>
+
+        <!-- Draggable Time Slider Component -->
+        <div class="time-slider-container" id="timeSliderContainer" style="display: none; position: absolute; bottom: 12px; left: 45%; transform: translateX(-50%); width: 70%; background: var(--theme-surface-elevated); border: 1px solid var(--theme-border); border-radius: var(--radius-xl); padding: var(--space-md); box-shadow: var(--shadow-lg); z-index: 10; flex-direction: column; gap: var(--space-xs);">
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--theme-text-secondary); width: 100%;">
+            <div>📅 <strong id="sliderCommitDate">No commit selected</strong></div>
+            <div>SHA: <code id="sliderCommitSha" style="font-family: var(--font-mono); font-weight: 600; color: var(--theme-primary);">—</code></div>
+          </div>
+          <input type="range" id="graphTimeSlider" style="width: 100%; cursor: pointer; margin: 4px 0;" />
+        </div>
+
         <div class="graph-controls">
           <button class="graph-controls__button" id="zoomInBtn" title="Zoom In">＋</button>
           <button class="graph-controls__button" id="zoomOutBtn" title="Zoom Out">−</button>
