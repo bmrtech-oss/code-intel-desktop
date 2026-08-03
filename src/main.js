@@ -615,6 +615,39 @@ console.log('main.js loaded');
     ];
   }
 
+  function computeSimpleDiff(prev, curr) {
+    const prevWords = prev.split(/(\s+)/).filter(Boolean);
+    const currWords = curr.split(/(\s+)/).filter(Boolean);
+
+    const result = [];
+    let p = 0;
+    let c = 0;
+
+    while (p < prevWords.length || c < currWords.length) {
+      if (p < prevWords.length && c < currWords.length && prevWords[p] === currWords[c]) {
+        result.push({ type: 'unchanged', value: prevWords[p] });
+        p++;
+        c++;
+      } else if (c < currWords.length && !prevWords.slice(p).includes(currWords[c])) {
+        result.push({ type: 'added', value: currWords[c] });
+        c++;
+      } else if (p < prevWords.length && !currWords.slice(c).includes(prevWords[p])) {
+        result.push({ type: 'removed', value: prevWords[p] });
+        p++;
+      } else {
+        if (p < prevWords.length) {
+          result.push({ type: 'removed', value: prevWords[p] });
+          p++;
+        }
+        if (c < currWords.length) {
+          result.push({ type: 'added', value: currWords[c] });
+          c++;
+        }
+      }
+    }
+    return result;
+  }
+
   let activeDetailNodeId = null;
 
   function renderRuleEvolution(nodeId, nodeLabel) {
@@ -629,7 +662,7 @@ console.log('main.js loaded');
       return;
     }
 
-    container.innerHTML = history.map(item => {
+    container.innerHTML = history.map((item, idx) => {
       const isCurrent = (item.sha === service.currentCommitSHA) ||
                         (item.sha === 'latest' && !service.currentCommitSHA);
       const borderLeft = isCurrent ? '4px solid var(--theme-primary)' : '2px solid var(--theme-border)';
@@ -637,13 +670,31 @@ console.log('main.js loaded');
       const opacity = isCurrent ? '1' : '0.65';
       const highlightBadge = isCurrent ? `<div class="slider-badge" style="font-size:10px; font-weight:600; background:var(--theme-primary); color:#fff; display:inline-block; padding:2px 6px; border-radius:var(--radius-full); margin-top:4px;">📍 CURRENT SLIDER POSITION</div>` : '';
 
+      const nextOlderRule = history[idx + 1];
+      let ruleDiffHtml = '';
+
+      if (nextOlderRule) {
+        const tokens = computeSimpleDiff(nextOlderRule.ruleText, item.ruleText);
+        ruleDiffHtml = `<div style="font-size:13px; font-family:var(--font-mono); line-height:1.4;">` +
+          tokens.map(t => {
+            if (t.type === 'added') {
+              return `<span style="background:#1f6feb; color:#fff; padding:1px 3px; border-radius:3px; font-weight:bold;">${t.value}</span>`;
+            } else if (t.type === 'removed') {
+              return `<span style="text-decoration:line-through; color:#ff7b72; background:rgba(255,123,114,0.15); padding:1px 3px; border-radius:3px;">${t.value}</span>`;
+            }
+            return `<span>${t.value}</span>`;
+          }).join('') + `</div>`;
+      } else {
+        ruleDiffHtml = `<div style="font-size:13px; font-family:var(--font-mono); color:#3fb950; background:rgba(63,185,80,0.15); padding:2px 6px; border-radius:4px;">✨ ${item.ruleText} (Initial Setup)</div>`;
+      }
+
       return `
         <div class="rule-timeline-item" data-sha="${item.sha}" style="padding:var(--space-sm); border-radius:var(--radius-md); border-left:${borderLeft}; background:${background}; opacity:${opacity}; transition:all 200ms ease;">
           <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--theme-text-dim); margin-bottom:2px;">
             <span>📅 ${item.date}</span>
             <span style="font-family:var(--font-mono);">${item.sha.substring(0, 7)}</span>
           </div>
-          <div style="font-weight:600; color:var(--theme-text-primary); font-size:12px;">${item.ruleText}</div>
+          <div style="margin-bottom:4px;">${ruleDiffHtml}</div>
           <div style="font-size:11px; color:var(--theme-text-secondary); margin-top:2px; line-height:1.3;">${item.desc}</div>
           ${highlightBadge}
         </div>
