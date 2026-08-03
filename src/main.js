@@ -468,6 +468,9 @@ console.log('main.js loaded');
               // Update time slider UI to match selection
               updateTimeSliderUI();
 
+              // Update rule evolution highlights
+              updateRuleEvolutionHighlights();
+
               // Trigger graph load and versioned file tree load
               loadGraph();
               loadVersionedFileTree(sha);
@@ -579,6 +582,101 @@ console.log('main.js loaded');
     updateTimeSliderUI();
   }
 
+  // === Rule Evolution Database & Logic ===
+  const mockRuleDnaDb = {
+    'n2': [
+      { sha: 'latest', date: '2026-07-27', ruleText: 'RateLimit: 5 requests/min', desc: 'Added aggressive rate limiting rule to prevent brute-force login attempts.' },
+      { sha: '957c1c57290ad39cba9f4a6d68cb804601d6f76e', date: '2026-07-25', ruleText: 'RateLimit: 10 requests/min', desc: 'Configured transient token verification and basic endpoint rules.' },
+      { sha: 'def5678', date: '2026-07-10', ruleText: 'RateLimit: Disabled', desc: 'Initial implementation of basic authentication lookup rules.' }
+    ],
+    'n14': [
+      { sha: 'latest', date: '2026-07-26', ruleText: 'TokenTTL: 15 minutes', desc: 'Shortened token lifespan to match strict enterprise compliance standards.' },
+      { sha: 'def5678', date: '2026-07-05', ruleText: 'TokenTTL: 60 minutes', desc: 'Initial signature validation rules for JWT generation.' }
+    ]
+  };
+
+  function getRuleEvolutionHistory(nodeId, nodeLabel) {
+    if (mockRuleDnaDb[nodeId]) {
+      return mockRuleDnaDb[nodeId];
+    }
+    return [
+      {
+        sha: service.currentCommitSHA || 'latest',
+        date: '2026-07-27',
+        ruleText: `Active Rules: ${nodeLabel} config standards v1.2`,
+        desc: `Verified and refactored business rules mapping within ${nodeLabel}.`
+      },
+      {
+        sha: '957c1c57290ad39cba9f4a6d68cb804601d6f76e',
+        date: '2026-07-20',
+        ruleText: `Active Rules: ${nodeLabel} legacy setup v1.0`,
+        desc: 'Initial migration of modular rules from legacy repository structure.'
+      }
+    ];
+  }
+
+  let activeDetailNodeId = null;
+
+  function renderRuleEvolution(nodeId, nodeLabel) {
+    activeDetailNodeId = nodeId;
+    const container = document.getElementById('ruleEvolutionTimeline');
+    if (!container) return;
+
+    const history = getRuleEvolutionHistory(nodeId, nodeLabel);
+
+    if (history.length === 0) {
+      container.innerHTML = `<div style="color:var(--theme-text-dim); text-align:center;">No history found for this node.</div>`;
+      return;
+    }
+
+    container.innerHTML = history.map(item => {
+      const isCurrent = (item.sha === service.currentCommitSHA) ||
+                        (item.sha === 'latest' && !service.currentCommitSHA);
+      const borderLeft = isCurrent ? '4px solid var(--theme-primary)' : '2px solid var(--theme-border)';
+      const background = isCurrent ? 'var(--theme-surface-elevated)' : 'transparent';
+      const opacity = isCurrent ? '1' : '0.65';
+      const highlightBadge = isCurrent ? `<div class="slider-badge" style="font-size:10px; font-weight:600; background:var(--theme-primary); color:#fff; display:inline-block; padding:2px 6px; border-radius:var(--radius-full); margin-top:4px;">📍 CURRENT SLIDER POSITION</div>` : '';
+
+      return `
+        <div class="rule-timeline-item" data-sha="${item.sha}" style="padding:var(--space-sm); border-radius:var(--radius-md); border-left:${borderLeft}; background:${background}; opacity:${opacity}; transition:all 200ms ease;">
+          <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--theme-text-dim); margin-bottom:2px;">
+            <span>📅 ${item.date}</span>
+            <span style="font-family:var(--font-mono);">${item.sha.substring(0, 7)}</span>
+          </div>
+          <div style="font-weight:600; color:var(--theme-text-primary); font-size:12px;">${item.ruleText}</div>
+          <div style="font-size:11px; color:var(--theme-text-secondary); margin-top:2px; line-height:1.3;">${item.desc}</div>
+          ${highlightBadge}
+        </div>
+      `;
+    }).join('');
+  }
+
+  function updateRuleEvolutionHighlights() {
+    const container = document.getElementById('ruleEvolutionTimeline');
+    if (!container) return;
+
+    container.querySelectorAll('.rule-timeline-item').forEach(el => {
+      const sha = el.dataset.sha;
+      const isCurrent = (sha === service.currentCommitSHA) ||
+                        (sha === 'latest' && !service.currentCommitSHA);
+
+      el.style.borderLeft = isCurrent ? '4px solid var(--theme-primary)' : '2px solid var(--theme-border)';
+      el.style.background = isCurrent ? 'var(--theme-surface-elevated)' : 'transparent';
+      el.style.opacity = isCurrent ? '1' : '0.65';
+
+      const existingBadge = el.querySelector('.slider-badge');
+      if (existingBadge) existingBadge.remove();
+
+      if (isCurrent) {
+        const badge = document.createElement('div');
+        badge.className = 'slider-badge';
+        badge.style.cssText = 'font-size:10px; font-weight:600; background:var(--theme-primary); color:#fff; display:inline-block; padding:2px 6px; border-radius:var(--radius-full); margin-top:4px;';
+        badge.textContent = '📍 CURRENT SLIDER POSITION';
+        el.appendChild(badge);
+      }
+    });
+  }
+
   // === Details Panel Functions ===
   function showNodeDetails(node) {
     const data = node.data();
@@ -593,6 +691,8 @@ console.log('main.js loaded');
 
     document.getElementById('emptyState').style.display = 'none';
     document.getElementById('detailsContent').style.display = 'block';
+
+    renderRuleEvolution(nodeId, nodeInfo.label);
 
     const incoming = service.graphData.edges.filter(e => e.target === nodeId);
     const impactList = document.getElementById('impactList');
@@ -1894,6 +1994,8 @@ console.log('main.js loaded');
           const shaEl = document.getElementById('sliderCommitSha');
           if (dateEl) dateEl.textContent = selected.date ? new Date(selected.date).toLocaleString() : 'No date';
           if (shaEl) shaEl.textContent = selected.sha ? selected.sha.substring(0, 7) : '—';
+
+          updateRuleEvolutionHighlights();
 
           loadGraph();
           loadVersionedFileTree(selected.sha);
