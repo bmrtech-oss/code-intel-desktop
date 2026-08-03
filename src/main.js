@@ -1049,7 +1049,7 @@ console.log('main.js loaded');
         },
         style: [
           { selector: 'node', style: { 'width': '36px', 'height': '36px', 'background-color': 'data(bgColor)', 'border-width': 2, 'border-color': 'data(borderColor)', 'border-opacity': 0.8, 'label': 'data(label)', 'font-size': '11px', 'font-family': "'Inter', -apple-system, sans-serif", 'color': isDark ? '#F0F6FC' : '#1F2328', 'text-valign': 'bottom', 'text-halign': 'center', 'text-outline-width': 2, 'text-outline-color': isDark ? '#0D1117' : '#FFFFFF', 'text-outline-opacity': 1, 'text-margin-y': 6, 'text-wrap': 'wrap', 'text-max-width': '60px' } },
-          { selector: 'node:selected', style: { 'border-width': 4, 'border-color': 'var(--theme-primary)', 'border-opacity': 1, 'width': '44px', 'height': '44px', 'background-opacity': 0.9 } },
+          { selector: 'node:selected', style: { 'border-width': 6, 'border-color': '#FF9F1C', 'border-opacity': 1, 'width': '46px', 'height': '46px', 'background-opacity': 1, 'overlay-color': '#FF9F1C', 'overlay-padding': 8, 'overlay-opacity': 0.35 } },
           { selector: 'edge', style: { 'width': 2, 'line-color': 'data(edgeColor)', 'target-arrow-color': 'data(edgeColor)', 'target-arrow-shape': 'triangle', 'source-arrow-shape': 'none', 'arrow-scale': 1.2, 'curve-style': 'bezier', 'label': 'data(type)', 'font-size': '9px', 'font-family': "'Inter', sans-serif", 'color': isDark ? '#8B949E' : '#656D76', 'text-outline-width': 1, 'text-outline-color': isDark ? '#0D1117' : '#FFFFFF', 'text-margin-y': -6, 'control-point-distance': 20, 'control-point-weight': 0.5 } },
           { selector: 'edge[type="imports"]', style: { 'line-style': 'dashed', 'line-color': 'data(edgeColor)', 'target-arrow-color': 'data(edgeColor)', 'width': 1.5 } }
         ],
@@ -1751,12 +1751,36 @@ console.log('main.js loaded');
       if (idx > -1) {
         selectedNodeIds.splice(idx, 1);
       }
+
+      // Automatically deselect direct neighbors
+      if (!window._selectingNeighbors) {
+        window._selectingNeighbors = true;
+        try {
+          node.neighborhood('node').forEach(neighbor => {
+            neighbor.unselect();
+            const nIdx = selectedNodeIds.indexOf(neighbor.id());
+            if (nIdx > -1) {
+              selectedNodeIds.splice(nIdx, 1);
+            }
+          });
+        } finally {
+          window._selectingNeighbors = false;
+        }
+      }
+
       updateWorkspaceScope();
       if (selectedNodeIds.length === 0) {
         showEmptyDetails();
       } else if (selectedNodeIds.length === 1) {
         const el = cy.getElementById(selectedNodeIds[0]);
         if (el && el.length) showNodeDetails(el);
+      } else {
+        document.getElementById('detailName').textContent = selectedNodeIds.length + ' nodes selected';
+        document.getElementById('detailType').textContent = 'Multi-select mode';
+        document.getElementById('emptyState').style.display = 'none';
+        document.getElementById('detailsContent').style.display = 'block';
+        document.getElementById('impactList').innerHTML = `<div class="details-panel__impact-item"><span class="mono">${selectedNodeIds.length} nodes in scope</span></div>`;
+        document.getElementById('callPaths').innerHTML = `<span class="mono">Use the Requirements Workspace to generate documentation for this selection.</span>`;
       }
     });
 
@@ -1942,7 +1966,7 @@ console.log('main.js loaded');
       },
       style: [
         { selector: 'node', style: { 'width': '36px', 'height': '36px', 'background-color': 'data(bgColor)', 'border-width': 2, 'border-color': 'data(borderColor)', 'border-opacity': 0.8, 'label': 'data(label)', 'font-size': '11px', 'font-family': "'Inter', -apple-system, sans-serif", 'color': isDark ? '#F0F6FC' : '#1F2328', 'text-valign': 'bottom', 'text-halign': 'center', 'text-outline-width': 2, 'text-outline-color': isDark ? '#0D1117' : '#FFFFFF', 'text-outline-opacity': 1, 'text-margin-y': 6, 'text-wrap': 'wrap', 'text-max-width': '60px' } },
-        { selector: 'node:selected', style: { 'border-width': 4, 'border-color': 'var(--theme-primary)', 'border-opacity': 1, 'width': '44px', 'height': '44px', 'background-opacity': 0.9 } },
+        { selector: 'node:selected', style: { 'border-width': 6, 'border-color': '#FF9F1C', 'border-opacity': 1, 'width': '46px', 'height': '46px', 'background-opacity': 1, 'overlay-color': '#FF9F1C', 'overlay-padding': 8, 'overlay-opacity': 0.35 } },
         { selector: 'edge', style: { 'width': 2, 'line-color': 'data(edgeColor)', 'target-arrow-color': 'data(edgeColor)', 'target-arrow-shape': 'triangle', 'source-arrow-shape': 'none', 'arrow-scale': 1.2, 'curve-style': 'bezier', 'label': 'data(type)', 'font-size': '9px', 'font-family': "'Inter', sans-serif", 'color': isDark ? '#8B949E' : '#656D76', 'text-outline-width': 1, 'text-outline-color': isDark ? '#0D1117' : '#FFFFFF', 'text-margin-y': -6, 'control-point-distance': 20, 'control-point-weight': 0.5 } },
         { selector: 'edge[type="imports"]', style: { 'line-style': 'dashed', 'line-color': 'data(edgeColor)', 'target-arrow-color': 'data(edgeColor)', 'width': 1.5 } }
       ],
