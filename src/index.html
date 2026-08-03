@@ -118,6 +118,14 @@
             Enum
           </button>
         </div>
+        <div style="display: flex; flex-direction: column; gap: var(--space-xs); margin-top: var(--space-md); padding-top: var(--space-md); border-top: 1px solid var(--theme-border);">
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; font-weight: 600; color: var(--theme-text-secondary);">
+            <span>High-Impact Filter (Min Dependents)</span>
+            <span id="riskFilterValue" style="color: var(--theme-primary); font-family: var(--font-mono);">0</span>
+          </div>
+          <input type="range" id="riskFilterSlider" min="0" max="10" value="0" style="width: 100%; cursor: pointer;" />
+          <div style="font-size: 10px; color: var(--theme-text-dim); line-height: 1.3;">Hides nodes with fewer incoming connections/dependencies to isolate core modules.</div>
+        </div>
       </section>
       <section class="sidebar-section">
         <div class="sidebar-section__title">MCP Tools</div>

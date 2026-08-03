@@ -947,6 +947,9 @@ console.log('main.js loaded');
       buildFileTree();
       showEmptyDetails();
       updateRepoSourceInfo();
+      if (typeof window.applyWorkspaceFilters === 'function') {
+        window.applyWorkspaceFilters();
+      }
       console.log('✅ File graph loaded with', fileNodes.length, 'nodes and', fileEdges.length, 'edges.');
     } catch (err) {
       console.warn('Failed to load file graph, falling back to empty graph:', err);
@@ -962,7 +965,10 @@ console.log('main.js loaded');
   function setupFilters() {
     const chips = document.querySelectorAll('.filter-chip');
     const legendRows = document.querySelectorAll('.legend__row.legend-filter');
+    const riskSlider = document.getElementById('riskFilterSlider');
+    const riskValueLabel = document.getElementById('riskFilterValue');
     let activeType = 'all';
+    let riskThreshold = 0;
 
     const setActiveType = (type) => {
       activeType = type;
@@ -974,30 +980,47 @@ console.log('main.js loaded');
     const applyFilter = () => {
       if (!cy) return;
       const nodes = cy.nodes();
-      if (activeType === 'all') {
-        nodes.style('opacity', 1);
-        nodes.style('display', 'element');
-        cy.edges().style('opacity', 1);
-        cy.edges().style('display', 'element');
-      } else {
-        nodes.forEach(node => {
-          const type = node.data('type');
-          if (type === activeType) {
-            node.style('opacity', 1);
-            node.style('display', 'element');
-          } else {
-            node.style('opacity', 0.1);
-            node.style('display', 'element');
-          }
-        });
-        cy.edges().style('opacity', (edge) => {
-          const src = edge.data('source');
-          const tgt = edge.data('target');
-          const srcVisible = cy.getElementById(src).style('opacity') !== 0.1;
-          const tgtVisible = cy.getElementById(tgt).style('opacity') !== 0.1;
-          return (srcVisible && tgtVisible) ? 1 : 0.1;
-        });
-      }
+
+      // First calculate node visibility based on type filtering and risk/in-degree threshold
+      nodes.forEach(node => {
+        const type = node.data('type');
+        const inDegree = node.indegree(false); // indegree in current full graph, ignoring direction if false is not passed but false computes only incoming
+
+        const matchesType = (activeType === 'all' || type === activeType);
+        const matchesRisk = (inDegree >= riskThreshold);
+
+        if (matchesType && matchesRisk) {
+          node.style('opacity', 1);
+          node.style('display', 'element');
+        } else if (matchesType && !matchesRisk) {
+          // Fade out nodes that do not meet the risk threshold but match type
+          node.style('opacity', 0.08);
+          node.style('display', 'element');
+        } else {
+          // Hide nodes that do not match type filter
+          node.style('opacity', 0.1);
+          node.style('display', 'element');
+        }
+      });
+
+      // Synchronize edge visibility: only highlight active connections
+      cy.edges().forEach(edge => {
+        const src = edge.data('source');
+        const tgt = edge.data('target');
+        const srcNode = cy.getElementById(src);
+        const tgtNode = cy.getElementById(tgt);
+
+        const srcVisible = srcNode.style('opacity') > 0.1;
+        const tgtVisible = tgtNode.style('opacity') > 0.1;
+
+        if (srcVisible && tgtVisible) {
+          edge.style('opacity', 1);
+          edge.style('display', 'element');
+        } else {
+          edge.style('opacity', 0.05);
+          edge.style('display', 'element');
+        }
+      });
     };
 
     chips.forEach(chip => {
@@ -1011,6 +1034,19 @@ console.log('main.js loaded');
         setActiveType(row.dataset.type);
       });
     });
+
+    if (riskSlider) {
+      riskSlider.addEventListener('input', (e) => {
+        riskThreshold = parseInt(e.target.value, 10);
+        if (riskValueLabel) {
+          riskValueLabel.textContent = riskThreshold;
+        }
+        applyFilter();
+      });
+    }
+
+    // Expose applyFilter to global scope to allow re-applying when graph renders/loads
+    window.applyWorkspaceFilters = applyFilter;
   }
 
   // === Graph Controls ===
@@ -1758,6 +1794,9 @@ console.log('main.js loaded');
     buildFileTree();
     showEmptyDetails();
     updateRepoSourceInfo();
+    if (typeof window.applyWorkspaceFilters === 'function') {
+      window.applyWorkspaceFilters();
+    }
     console.log('✅ Graph loaded with', graph.nodes.length, 'nodes and', graph.edges.length, 'edges.');
   }
 
