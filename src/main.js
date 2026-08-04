@@ -27,6 +27,7 @@ console.log('main.js loaded');
     const current = document.documentElement.getAttribute('data-theme') || 'dark';
     const next = current === 'dark' ? 'light' : 'dark';
     setTheme(next);
+    loadGraph();
   };
   const updateUI = (theme) => {
     const icon = document.getElementById('themeIcon');
@@ -187,58 +188,75 @@ console.log('main.js loaded');
     }
 
     getDemoGraphData() {
-      return {
-        nodes: [
-          { id: 'n1', label: 'AuthService', type: 'class' },
-          { id: 'n2', label: 'login', type: 'function' },
-          { id: 'n3', label: 'validateUser', type: 'function' },
-          { id: 'n4', label: 'hashPassword', type: 'function' },
-          { id: 'n5', label: 'UserRepository', type: 'class' },
-          { id: 'n6', label: 'findByEmail', type: 'function' },
-          { id: 'n7', label: 'DatabaseConnection', type: 'class' },
-          { id: 'n8', label: 'query', type: 'function' },
-          { id: 'n9', label: 'Logger', type: 'class' },
-          { id: 'n10', label: 'log', type: 'function' },
-          { id: 'n11', label: 'ConfigService', type: 'class' },
-          { id: 'n12', label: 'getSecret', type: 'function' },
-          { id: 'n13', label: 'TokenService', type: 'class' },
-          { id: 'n14', label: 'generateToken', type: 'function' },
-          { id: 'n15', label: 'verifyToken', type: 'function' },
-          { id: 'n16', label: 'EmailService', type: 'class' },
-          { id: 'n17', label: 'sendWelcome', type: 'function' },
-          { id: 'n18', label: 'User', type: 'class' },
-          { id: 'n19', label: 'Role', type: 'enum' },
-          { id: 'n20', label: 'main', type: 'function' },
-        ],
-        edges: [
-          { source: 'n2', target: 'n3', type: 'calls' },
-          { source: 'n2', target: 'n4', type: 'calls' },
-          { source: 'n2', target: 'n5', type: 'calls' },
-          { source: 'n3', target: 'n6', type: 'calls' },
-          { source: 'n3', target: 'n18', type: 'calls' },
-          { source: 'n6', target: 'n7', type: 'calls' },
-          { source: 'n6', target: 'n8', type: 'calls' },
-          { source: 'n5', target: 'n7', type: 'calls' },
-          { source: 'n1', target: 'n9', type: 'calls' },
-          { source: 'n1', target: 'n11', type: 'calls' },
-          { source: 'n1', target: 'n13', type: 'calls' },
-          { source: 'n14', target: 'n12', type: 'calls' },
-          { source: 'n14', target: 'n10', type: 'calls' },
-          { source: 'n15', target: 'n12', type: 'calls' },
-          { source: 'n16', target: 'n17', type: 'calls' },
-          { source: 'n17', target: 'n10', type: 'calls' },
-          { source: 'n20', target: 'n1', type: 'calls' },
-          { source: 'n20', target: 'n16', type: 'calls' },
-          { source: 'n20', target: 'n14', type: 'calls' },
-          { source: 'n2', target: 'n1', type: 'imports' },
-          { source: 'n3', target: 'n5', type: 'imports' },
-          { source: 'n6', target: 'n7', type: 'imports' },
-          { source: 'n14', target: 'n11', type: 'imports' },
-          { source: 'n17', target: 'n9', type: 'imports' },
-          { source: 'n5', target: 'n18', type: 'imports' },
-          { source: 'n1', target: 'n18', type: 'imports' },
-        ]
-      };
+      const allNodes = [
+        { id: 'n1', label: 'AuthService', type: 'class' },
+        { id: 'n2', label: 'login', type: 'function' },
+        { id: 'n3', label: 'validateUser', type: 'function' },
+        { id: 'n4', label: 'hashPassword', type: 'function' },
+        { id: 'n5', label: 'UserRepository', type: 'class' },
+        { id: 'n6', label: 'findByEmail', type: 'function' },
+        { id: 'n7', label: 'DatabaseConnection', type: 'class' },
+        { id: 'n8', label: 'query', type: 'function' },
+        { id: 'n9', label: 'Logger', type: 'class' },
+        { id: 'n10', label: 'log', type: 'function' },
+        { id: 'n11', label: 'ConfigService', type: 'class' },
+        { id: 'n12', label: 'getSecret', type: 'function' },
+        { id: 'n13', label: 'TokenService', type: 'class' },
+        { id: 'n14', label: 'generateToken', type: 'function' },
+        { id: 'n15', label: 'verifyToken', type: 'function' },
+        { id: 'n16', label: 'EmailService', type: 'class' },
+        { id: 'n17', label: 'sendWelcome', type: 'function' },
+        { id: 'n18', label: 'User', type: 'class' },
+        { id: 'n19', label: 'Role', type: 'enum' },
+        { id: 'n20', label: 'main', type: 'function' },
+      ];
+
+      const allEdges = [
+        { source: 'n2', target: 'n3', type: 'calls' },
+        { source: 'n2', target: 'n4', type: 'calls' },
+        { source: 'n2', target: 'n5', type: 'calls' },
+        { source: 'n3', target: 'n6', type: 'calls' },
+        { source: 'n3', target: 'n18', type: 'calls' },
+        { source: 'n6', target: 'n7', type: 'calls' },
+        { source: 'n6', target: 'n8', type: 'calls' },
+        { source: 'n5', target: 'n7', type: 'calls' },
+        { source: 'n1', target: 'n9', type: 'calls' },
+        { source: 'n1', target: 'n11', type: 'calls' },
+        { source: 'n1', target: 'n13', type: 'calls' },
+        { source: 'n14', target: 'n12', type: 'calls' },
+        { source: 'n14', target: 'n10', type: 'calls' },
+        { source: 'n15', target: 'n12', type: 'calls' },
+        { source: 'n16', target: 'n17', type: 'calls' },
+        { source: 'n17', target: 'n10', type: 'calls' },
+        { source: 'n20', target: 'n1', type: 'calls' },
+        { source: 'n20', target: 'n16', type: 'calls' },
+        { source: 'n20', target: 'n14', type: 'calls' },
+        { source: 'n2', target: 'n1', type: 'imports' },
+        { source: 'n3', target: 'n5', type: 'imports' },
+        { source: 'n6', target: 'n7', type: 'imports' },
+        { source: 'n14', target: 'n11', type: 'imports' },
+        { source: 'n17', target: 'n9', type: 'imports' },
+        { source: 'n5', target: 'n18', type: 'imports' },
+        { source: 'n1', target: 'n18', type: 'imports' },
+      ];
+
+      // Filter based on selected mock commit
+      let visibleNodeIds = new Set();
+      const sha = this.currentCommitSHA;
+      if (!sha || sha === 'c333333333333333333333333333333333333333') {
+        allNodes.forEach(n => visibleNodeIds.add(n.id));
+      } else if (sha === 'c222222222222222222222222222222222222222') {
+        const ids = ['n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7', 'n8', 'n9', 'n10', 'n11', 'n12', 'n13', 'n14', 'n15', 'n18'];
+        ids.forEach(id => visibleNodeIds.add(id));
+      } else {
+        const ids = ['n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7', 'n8', 'n18'];
+        ids.forEach(id => visibleNodeIds.add(id));
+      }
+
+      const nodes = allNodes.filter(n => visibleNodeIds.has(n.id));
+      const edges = allEdges.filter(e => visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target));
+
+      return { nodes, edges };
     }
 
     // === MCP Discovery ===
@@ -279,6 +297,36 @@ console.log('main.js loaded');
   let currentRepoTree = null;
   let currentRepoSource = 'Demo project';
   let activeEventSource = null;
+  let currentTimelineCommits = [];
+
+  function updateTimeSliderUI() {
+    const container = document.getElementById('timeSliderContainer');
+    const slider = document.getElementById('graphTimeSlider');
+    const dateEl = document.getElementById('sliderCommitDate');
+    const shaEl = document.getElementById('sliderCommitSha');
+
+    if (!container || !slider) return;
+
+    if (service.demoMode || !currentTimelineCommits || currentTimelineCommits.length === 0) {
+      container.style.display = 'none';
+      return;
+    }
+
+    container.style.display = 'flex';
+    slider.min = 0;
+    slider.max = currentTimelineCommits.length - 1;
+
+    let idx = currentTimelineCommits.findIndex(c => c.sha === service.currentCommitSHA);
+    if (idx === -1) idx = 0;
+
+    slider.value = idx;
+
+    const currentCommit = currentTimelineCommits[idx];
+    if (currentCommit) {
+      if (dateEl) dateEl.textContent = currentCommit.date ? new Date(currentCommit.date).toLocaleString() : 'No date';
+      if (shaEl) shaEl.textContent = currentCommit.sha ? currentCommit.sha.substring(0, 7) : '—';
+    }
+  }
 
   function subscribeToIngestionStream(jobId) {
     if (!jobId) {
@@ -379,12 +427,80 @@ console.log('main.js loaded');
   }
 
   async function loadBranchesAndCommits() {
-    if (!currentRepoSource || service.demoMode) {
+    const branchSelector = document.getElementById('branchSelector');
+    const commitTimelineRail = document.getElementById('commitTimelineRail');
+
+    if (service.demoMode) {
+      const branches = ['main', 'dev'];
+      const commits = [
+        { sha: 'c333333333333333333333333333333333333333', date: '2026-07-27T14:30:00Z', author: 'Charlie', msg: 'Add Email Service and Main' },
+        { sha: 'c222222222222222222222222222222222222222', date: '2026-07-20T10:15:00Z', author: 'Bob', msg: 'Add Config and Token Services' },
+        { sha: 'c111111111111111111111111111111111111111', date: '2026-07-10T09:00:00Z', author: 'Alice', msg: 'Initial Commit' }
+      ];
+
+      currentTimelineCommits = commits;
+
+      // 1. Populate branch dropdown
+      if (branchSelector) {
+        branchSelector.innerHTML = branches.map(b => `<option value="${b}">${b}</option>`).join('');
+      }
+
+      // 2. Populate commit timeline rail
+      if (commitTimelineRail) {
+        commitTimelineRail.innerHTML = commits.map(c => {
+          const shortSha = c.sha.substring(0, 7);
+          const author = c.author;
+          const dateStr = new Date(c.date).toLocaleString();
+          const borderStyle = service.currentCommitSHA === c.sha ? 'var(--theme-primary)' : 'var(--theme-border)';
+          const bgStyle = service.currentCommitSHA === c.sha ? 'var(--theme-surface)' : 'var(--theme-surface-elevated)';
+          return `
+            <div class="commit-card" data-sha="${c.sha}" style="padding: var(--space-sm); border: 1px solid ${borderStyle}; border-radius: var(--radius-sm); background: ${bgStyle}; cursor: pointer; transition: all 150ms ease; display: flex; flex-direction: column; gap: 2px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; pointer-events: none;">
+                <span style="font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--theme-primary);">${shortSha}</span>
+                <span style="font-size: 10px; color: var(--theme-text-dim);">${dateStr}</span>
+              </div>
+              <div style="font-size: 11px; font-weight: 500; color: var(--theme-text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap; pointer-events: none;">by ${author}</div>
+              <div style="font-size: 10px; color: var(--theme-text-secondary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap; pointer-events: none;">${c.msg}</div>
+            </div>
+          `;
+        }).join('');
+
+        // 3. Bind click listeners to commit cards
+        commitTimelineRail.querySelectorAll('.commit-card').forEach(card => {
+          card.addEventListener('click', () => {
+            commitTimelineRail.querySelectorAll('.commit-card').forEach(cc => {
+              cc.style.borderColor = 'var(--theme-border)';
+              cc.style.background = 'var(--theme-surface-elevated)';
+            });
+            card.style.borderColor = 'var(--theme-primary)';
+            card.style.background = 'var(--theme-surface)';
+
+            const sha = card.dataset.sha;
+            console.log(`Demo commit card clicked. Selecting SHA: ${sha}`);
+            service.currentCommitSHA = sha;
+
+            // Update time slider UI to match selection
+            updateTimeSliderUI();
+
+            // Update rule evolution highlights
+            updateRuleEvolutionHighlights();
+
+            // Trigger graph load
+            loadGraph();
+          });
+        });
+      }
+
+      if (!service.currentCommitSHA) {
+        service.currentCommitSHA = commits[0].sha;
+      }
+      updateTimeSliderUI();
       return;
     }
 
-    const branchSelector = document.getElementById('branchSelector');
-    const commitTimelineRail = document.getElementById('commitTimelineRail');
+    if (!currentRepoSource) {
+      return;
+    }
 
     console.log(`loadBranchesAndCommits: Fetching for ${currentRepoSource}`);
 
@@ -393,6 +509,8 @@ console.log('main.js loaded');
       const data = await resp.json();
       const branches = data.branches || [];
       const commits = data.commits || [];
+
+      currentTimelineCommits = commits;
 
       // 1. Populate branch dropdown
       if (branchSelector) {
@@ -433,6 +551,12 @@ console.log('main.js loaded');
               console.log(`Commit card clicked. Selecting SHA: ${sha}`);
               service.currentCommitSHA = sha;
 
+              // Update time slider UI to match selection
+              updateTimeSliderUI();
+
+              // Update rule evolution highlights
+              updateRuleEvolutionHighlights();
+
               // Trigger graph load and versioned file tree load
               loadGraph();
               loadVersionedFileTree(sha);
@@ -446,6 +570,8 @@ console.log('main.js loaded');
           service.currentCommitSHA = latestSHA;
           loadVersionedFileTree(latestSHA);
         }
+
+        updateTimeSliderUI();
       }
     } catch (e) {
       console.warn('Failed to load branches and commits:', e);
@@ -536,9 +662,157 @@ console.log('main.js loaded');
     currentRepoTree = null;
     currentRepoSource = 'Demo project';
     service.demoMode = true;
+    service.currentCommitSHA = 'c333333333333333333333333333333333333333';
     service.graphData = null;
     updateRepoSourceInfo();
+    loadBranchesAndCommits();
     loadGraph();
+  }
+
+  // === Rule Evolution Database & Logic ===
+  const mockRuleDnaDb = {
+    'n2': [
+      { sha: 'c333333333333333333333333333333333333333', date: '2026-07-27', ruleText: 'RateLimit: 5 requests/min', desc: 'Added aggressive rate limiting rule to prevent brute-force login attempts.' },
+      { sha: 'c222222222222222222222222222222222222222', date: '2026-07-20', ruleText: 'RateLimit: 10 requests/min', desc: 'Configured transient token verification and basic endpoint rules.' },
+      { sha: 'c111111111111111111111111111111111111111', date: '2026-07-10', ruleText: 'RateLimit: Disabled', desc: 'Initial implementation of basic authentication lookup rules.' }
+    ],
+    'n14': [
+      { sha: 'c333333333333333333333333333333333333333', date: '2026-07-27', ruleText: 'TokenTTL: 15 minutes', desc: 'Shortened token lifespan to match strict enterprise compliance standards.' },
+      { sha: 'c222222222222222222222222222222222222222', date: '2026-07-20', ruleText: 'TokenTTL: 60 minutes', desc: 'Initial signature validation rules for JWT generation.' }
+    ]
+  };
+
+  function getRuleEvolutionHistory(nodeId, nodeLabel) {
+    if (mockRuleDnaDb[nodeId]) {
+      return mockRuleDnaDb[nodeId];
+    }
+    return [
+      {
+        sha: 'c333333333333333333333333333333333333333',
+        date: '2026-07-27',
+        ruleText: `Active Rules: ${nodeLabel} config standards v1.2`,
+        desc: `Verified and refactored business rules mapping within ${nodeLabel}.`
+      },
+      {
+        sha: 'c222222222222222222222222222222222222222',
+        date: '2026-07-20',
+        ruleText: `Active Rules: ${nodeLabel} legacy setup v1.0`,
+        desc: 'Initial migration of modular rules from legacy repository structure.'
+      }
+    ];
+  }
+
+  function computeSimpleDiff(prev, curr) {
+    const prevWords = prev.split(/(\s+)/).filter(Boolean);
+    const currWords = curr.split(/(\s+)/).filter(Boolean);
+
+    const result = [];
+    let p = 0;
+    let c = 0;
+
+    while (p < prevWords.length || c < currWords.length) {
+      if (p < prevWords.length && c < currWords.length && prevWords[p] === currWords[c]) {
+        result.push({ type: 'unchanged', value: prevWords[p] });
+        p++;
+        c++;
+      } else if (c < currWords.length && !prevWords.slice(p).includes(currWords[c])) {
+        result.push({ type: 'added', value: currWords[c] });
+        c++;
+      } else if (p < prevWords.length && !currWords.slice(c).includes(prevWords[p])) {
+        result.push({ type: 'removed', value: prevWords[p] });
+        p++;
+      } else {
+        if (p < prevWords.length) {
+          result.push({ type: 'removed', value: prevWords[p] });
+          p++;
+        }
+        if (c < currWords.length) {
+          result.push({ type: 'added', value: currWords[c] });
+          c++;
+        }
+      }
+    }
+    return result;
+  }
+
+  let activeDetailNodeId = null;
+
+  function renderRuleEvolution(nodeId, nodeLabel) {
+    activeDetailNodeId = nodeId;
+    const container = document.getElementById('ruleEvolutionTimeline');
+    if (!container) return;
+
+    const history = getRuleEvolutionHistory(nodeId, nodeLabel);
+
+    if (history.length === 0) {
+      container.innerHTML = `<div style="color:var(--theme-text-dim); text-align:center;">No history found for this node.</div>`;
+      return;
+    }
+
+    container.innerHTML = history.map((item, idx) => {
+      const isCurrent = (item.sha === service.currentCommitSHA) ||
+                        (item.sha === 'latest' && !service.currentCommitSHA);
+      const borderLeft = isCurrent ? '4px solid var(--theme-primary)' : '2px solid var(--theme-border)';
+      const background = isCurrent ? 'var(--theme-surface-elevated)' : 'transparent';
+      const opacity = isCurrent ? '1' : '0.65';
+      const highlightBadge = isCurrent ? `<div class="slider-badge" style="font-size:10px; font-weight:600; background:var(--theme-primary); color:#fff; display:inline-block; padding:2px 6px; border-radius:var(--radius-full); margin-top:4px;">📍 CURRENT SLIDER POSITION</div>` : '';
+
+      const nextOlderRule = history[idx + 1];
+      let ruleDiffHtml = '';
+
+      if (nextOlderRule) {
+        const tokens = computeSimpleDiff(nextOlderRule.ruleText, item.ruleText);
+        ruleDiffHtml = `<div style="font-size:13px; font-family:var(--font-mono); line-height:1.4;">` +
+          tokens.map(t => {
+            if (t.type === 'added') {
+              return `<span style="background:#1f6feb; color:#fff; padding:1px 3px; border-radius:3px; font-weight:bold;">${t.value}</span>`;
+            } else if (t.type === 'removed') {
+              return `<span style="text-decoration:line-through; color:#ff7b72; background:rgba(255,123,114,0.15); padding:1px 3px; border-radius:3px;">${t.value}</span>`;
+            }
+            return `<span>${t.value}</span>`;
+          }).join('') + `</div>`;
+      } else {
+        ruleDiffHtml = `<div style="font-size:13px; font-family:var(--font-mono); color:#3fb950; background:rgba(63,185,80,0.15); padding:2px 6px; border-radius:4px;">✨ ${item.ruleText} (Initial Setup)</div>`;
+      }
+
+      return `
+        <div class="rule-timeline-item" data-sha="${item.sha}" style="padding:var(--space-sm); border-radius:var(--radius-md); border-left:${borderLeft}; background:${background}; opacity:${opacity}; transition:all 200ms ease;">
+          <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--theme-text-dim); margin-bottom:2px;">
+            <span>📅 ${item.date}</span>
+            <span style="font-family:var(--font-mono);">${item.sha.substring(0, 7)}</span>
+          </div>
+          <div style="margin-bottom:4px;">${ruleDiffHtml}</div>
+          <div style="font-size:11px; color:var(--theme-text-secondary); margin-top:2px; line-height:1.3;">${item.desc}</div>
+          ${highlightBadge}
+        </div>
+      `;
+    }).join('');
+  }
+
+  function updateRuleEvolutionHighlights() {
+    const container = document.getElementById('ruleEvolutionTimeline');
+    if (!container) return;
+
+    container.querySelectorAll('.rule-timeline-item').forEach(el => {
+      const sha = el.dataset.sha;
+      const isCurrent = (sha === service.currentCommitSHA) ||
+                        (sha === 'latest' && !service.currentCommitSHA);
+
+      el.style.borderLeft = isCurrent ? '4px solid var(--theme-primary)' : '2px solid var(--theme-border)';
+      el.style.background = isCurrent ? 'var(--theme-surface-elevated)' : 'transparent';
+      el.style.opacity = isCurrent ? '1' : '0.65';
+
+      const existingBadge = el.querySelector('.slider-badge');
+      if (existingBadge) existingBadge.remove();
+
+      if (isCurrent) {
+        const badge = document.createElement('div');
+        badge.className = 'slider-badge';
+        badge.style.cssText = 'font-size:10px; font-weight:600; background:var(--theme-primary); color:#fff; display:inline-block; padding:2px 6px; border-radius:var(--radius-full); margin-top:4px;';
+        badge.textContent = '📍 CURRENT SLIDER POSITION';
+        el.appendChild(badge);
+      }
+    });
   }
 
   // === Details Panel Functions ===
@@ -555,6 +829,8 @@ console.log('main.js loaded');
 
     document.getElementById('emptyState').style.display = 'none';
     document.getElementById('detailsContent').style.display = 'block';
+
+    renderRuleEvolution(nodeId, nodeInfo.label);
 
     const incoming = service.graphData.edges.filter(e => e.target === nodeId);
     const impactList = document.getElementById('impactList');
@@ -662,6 +938,40 @@ console.log('main.js loaded');
     });
   }
 
+  function getColorForType(type) {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const colors = {
+      light: {
+        'function': '#2da44e',
+        'class': '#0969da',
+        'module': '#8250df',
+        'file': '#6e7781',
+        'directory': '#6e7781',
+        'folder': '#6e7781',
+        'variable': '#cf222e',
+        'enum': '#953b00',
+        'edge-call': '#0969da',
+        'edge-import': '#d46003',
+        'symbol': '#6e7781'
+      },
+      dark: {
+        'function': '#3fb950',
+        'class': '#58a6ff',
+        'module': '#bc8cff',
+        'file': '#8b949e',
+        'directory': '#8b949e',
+        'folder': '#8b949e',
+        'variable': '#ff7b72',
+        'enum': '#f0883e',
+        'edge-call': '#58a6ff',
+        'edge-import': '#ff9e3b',
+        'symbol': '#8b949e'
+      }
+    };
+    const themeColors = isDark ? colors.dark : colors.light;
+    return themeColors[type] || themeColors['symbol'];
+  }
+
   // === Load File Graph ===
   async function loadFileGraph(commitSHA) {
     const sha = commitSHA || service.currentCommitSHA || 'latest';
@@ -720,16 +1030,28 @@ console.log('main.js loaded');
         container: document.getElementById('cy'),
         elements: {
           nodes: fileNodes.map(n => ({
-            data: { id: n.id, label: n.label, type: n.type, name: n.label },
-            style: { 'background-color': `var(--node-${n.type})`, 'border-color': `var(--node-${n.type})` }
+            data: {
+              id: n.id,
+              label: n.label,
+              type: n.type,
+              name: n.label,
+              bgColor: getColorForType(n.type),
+              borderColor: getColorForType(n.type)
+            }
           })),
-          edges: fileEdges.map(e => ({ data: { ...e, id: e.source + '-' + e.target } }))
+          edges: fileEdges.map(e => ({
+            data: {
+              ...e,
+              id: e.source + '-' + e.target,
+              edgeColor: getColorForType(e.type === 'imports' ? 'edge-import' : 'edge-call')
+            }
+          }))
         },
         style: [
-          { selector: 'node', style: { 'width': '36px', 'height': '36px', 'border-width': 2, 'border-color': 'data(border-color)', 'border-opacity': 0.8, 'label': 'data(label)', 'font-size': '11px', 'font-family': "'Inter', -apple-system, sans-serif", 'color': isDark ? '#F0F6FC' : '#1F2328', 'text-valign': 'bottom', 'text-halign': 'center', 'text-outline-width': 2, 'text-outline-color': isDark ? '#0D1117' : '#FFFFFF', 'text-outline-opacity': 1, 'text-margin-y': 6, 'text-wrap': 'wrap', 'text-max-width': '60px' } },
-          { selector: 'node:selected', style: { 'border-width': 4, 'border-color': 'var(--theme-primary)', 'border-opacity': 1, 'width': '44px', 'height': '44px', 'background-opacity': 0.9 } },
-          { selector: 'edge', style: { 'width': 2, 'line-color': 'var(--edge-call)', 'target-arrow-color': 'var(--edge-call)', 'target-arrow-shape': 'triangle', 'source-arrow-shape': 'none', 'arrow-scale': 1.2, 'curve-style': 'bezier', 'label': 'data(type)', 'font-size': '9px', 'font-family': "'Inter', sans-serif", 'color': isDark ? '#8B949E' : '#656D76', 'text-outline-width': 1, 'text-outline-color': isDark ? '#0D1117' : '#FFFFFF', 'text-margin-y': -6, 'control-point-distance': 20, 'control-point-weight': 0.5 } },
-          { selector: 'edge[type="imports"]', style: { 'line-style': 'dashed', 'line-color': 'var(--edge-import)', 'target-arrow-color': 'var(--edge-import)', 'width': 1.5 } }
+          { selector: 'node', style: { 'width': '36px', 'height': '36px', 'background-color': 'data(bgColor)', 'border-width': 2, 'border-color': 'data(borderColor)', 'border-opacity': 0.8, 'label': 'data(label)', 'font-size': '11px', 'font-family': "'Inter', -apple-system, sans-serif", 'color': isDark ? '#F0F6FC' : '#1F2328', 'text-valign': 'bottom', 'text-halign': 'center', 'text-outline-width': 0, 'text-margin-y': 6, 'text-wrap': 'wrap', 'text-max-width': '60px' } },
+          { selector: 'node:selected', style: { 'border-width': 4, 'border-color': isDark ? '#58A6FF' : '#0969DA', 'border-opacity': 1, 'width': '42px', 'height': '42px', 'background-opacity': 1, 'color': isDark ? '#58A6FF' : '#0969DA', 'font-weight': 'bold', 'overlay-color': isDark ? '#58A6FF' : '#0969DA', 'overlay-padding': 6, 'overlay-opacity': 0.15 } },
+          { selector: 'edge', style: { 'width': 2, 'line-color': 'data(edgeColor)', 'target-arrow-color': 'data(edgeColor)', 'target-arrow-shape': 'triangle', 'source-arrow-shape': 'none', 'arrow-scale': 1.2, 'curve-style': 'bezier', 'label': 'data(type)', 'font-size': '9px', 'font-family': "'Inter', sans-serif", 'color': isDark ? '#8B949E' : '#656D76', 'text-outline-width': 0, 'text-margin-y': -6, 'control-point-distance': 20, 'control-point-weight': 0.5 } },
+          { selector: 'edge[type="imports"]', style: { 'line-style': 'dashed', 'line-color': 'data(edgeColor)', 'target-arrow-color': 'data(edgeColor)', 'width': 1.5 } }
         ],
         layout: {
           name: 'concentric',
@@ -758,6 +1080,9 @@ console.log('main.js loaded');
       buildFileTree();
       showEmptyDetails();
       updateRepoSourceInfo();
+      if (typeof window.applyWorkspaceFilters === 'function') {
+        window.applyWorkspaceFilters();
+      }
       console.log('✅ File graph loaded with', fileNodes.length, 'nodes and', fileEdges.length, 'edges.');
     } catch (err) {
       console.warn('Failed to load file graph, falling back to empty graph:', err);
@@ -773,7 +1098,10 @@ console.log('main.js loaded');
   function setupFilters() {
     const chips = document.querySelectorAll('.filter-chip');
     const legendRows = document.querySelectorAll('.legend__row.legend-filter');
+    const riskSlider = document.getElementById('riskFilterSlider');
+    const riskValueLabel = document.getElementById('riskFilterValue');
     let activeType = 'all';
+    let riskThreshold = 0;
 
     const setActiveType = (type) => {
       activeType = type;
@@ -785,30 +1113,47 @@ console.log('main.js loaded');
     const applyFilter = () => {
       if (!cy) return;
       const nodes = cy.nodes();
-      if (activeType === 'all') {
-        nodes.style('opacity', 1);
-        nodes.style('display', 'element');
-        cy.edges().style('opacity', 1);
-        cy.edges().style('display', 'element');
-      } else {
-        nodes.forEach(node => {
-          const type = node.data('type');
-          if (type === activeType) {
-            node.style('opacity', 1);
-            node.style('display', 'element');
-          } else {
-            node.style('opacity', 0.1);
-            node.style('display', 'element');
-          }
-        });
-        cy.edges().style('opacity', (edge) => {
-          const src = edge.data('source');
-          const tgt = edge.data('target');
-          const srcVisible = cy.getElementById(src).style('opacity') !== 0.1;
-          const tgtVisible = cy.getElementById(tgt).style('opacity') !== 0.1;
-          return (srcVisible && tgtVisible) ? 1 : 0.1;
-        });
-      }
+
+      // First calculate node visibility based on type filtering and risk/in-degree threshold
+      nodes.forEach(node => {
+        const type = node.data('type');
+        const inDegree = node.indegree(false); // indegree in current full graph, ignoring direction if false is not passed but false computes only incoming
+
+        const matchesType = (activeType === 'all' || type === activeType);
+        const matchesRisk = (inDegree >= riskThreshold);
+
+        if (matchesType && matchesRisk) {
+          node.style('opacity', 1);
+          node.style('display', 'element');
+        } else if (matchesType && !matchesRisk) {
+          // Fade out nodes that do not meet the risk threshold but match type
+          node.style('opacity', 0.08);
+          node.style('display', 'element');
+        } else {
+          // Hide nodes that do not match type filter
+          node.style('opacity', 0.1);
+          node.style('display', 'element');
+        }
+      });
+
+      // Synchronize edge visibility: only highlight active connections
+      cy.edges().forEach(edge => {
+        const src = edge.data('source');
+        const tgt = edge.data('target');
+        const srcNode = cy.getElementById(src);
+        const tgtNode = cy.getElementById(tgt);
+
+        const srcVisible = srcNode.style('opacity') > 0.1;
+        const tgtVisible = tgtNode.style('opacity') > 0.1;
+
+        if (srcVisible && tgtVisible) {
+          edge.style('opacity', 1);
+          edge.style('display', 'element');
+        } else {
+          edge.style('opacity', 0.05);
+          edge.style('display', 'element');
+        }
+      });
     };
 
     chips.forEach(chip => {
@@ -822,6 +1167,19 @@ console.log('main.js loaded');
         setActiveType(row.dataset.type);
       });
     });
+
+    if (riskSlider) {
+      riskSlider.addEventListener('input', (e) => {
+        riskThreshold = parseInt(e.target.value, 10);
+        if (riskValueLabel) {
+          riskValueLabel.textContent = riskThreshold;
+        }
+        applyFilter();
+      });
+    }
+
+    // Expose applyFilter to global scope to allow re-applying when graph renders/loads
+    window.applyWorkspaceFilters = applyFilter;
   }
 
   // === Graph Controls ===
@@ -862,7 +1220,15 @@ console.log('main.js loaded');
     if (currentRepoTree) {
       container.innerHTML = renderTree(currentRepoTree, 0);
     } else {
-      const folderMap = { 'auth': ['n1', 'n13'], 'user': ['n5', 'n18'], 'utils': ['n9', 'n11'], 'db': ['n7'], 'email': ['n16'], 'root': ['n20'] };
+      let folderMap = { 'auth': ['n1'], 'user': ['n5', 'n18'], 'db': ['n7'] };
+      const sha = service.currentCommitSHA;
+
+      if (!sha || sha === 'c333333333333333333333333333333333333333') {
+        folderMap = { 'auth': ['n1', 'n13'], 'user': ['n5', 'n18'], 'utils': ['n9', 'n11'], 'db': ['n7'], 'email': ['n16'], 'root': ['n20'] };
+      } else if (sha === 'c222222222222222222222222222222222222222') {
+        folderMap = { 'auth': ['n1', 'n13'], 'user': ['n5', 'n18'], 'utils': ['n9', 'n11'], 'db': ['n7'] };
+      }
+
       let html = '';
       html += `<div class="file-tree__item file-tree__item--folder" style="padding-left:8px;"><span class="file-tree__toggle file-tree__toggle--expanded" data-folder-name="src">▶</span><span class="file-tree__icon">📂</span><span>src</span></div>`;
       html += `<div class="file-tree__children" data-folder-children="src">`;
@@ -1350,6 +1716,22 @@ console.log('main.js loaded');
       if (!selectedNodeIds.includes(node.id())) {
         selectedNodeIds.push(node.id());
       }
+
+      // Automatically select direct neighbors
+      if (!window._selectingNeighbors) {
+        window._selectingNeighbors = true;
+        try {
+          node.neighborhood('node').forEach(neighbor => {
+            neighbor.select();
+            if (!selectedNodeIds.includes(neighbor.id())) {
+              selectedNodeIds.push(neighbor.id());
+            }
+          });
+        } finally {
+          window._selectingNeighbors = false;
+        }
+      }
+
       updateWorkspaceScope();
       if (selectedNodeIds.length === 1) {
         showNodeDetails(node);
@@ -1369,12 +1751,36 @@ console.log('main.js loaded');
       if (idx > -1) {
         selectedNodeIds.splice(idx, 1);
       }
+
+      // Automatically deselect direct neighbors
+      if (!window._selectingNeighbors) {
+        window._selectingNeighbors = true;
+        try {
+          node.neighborhood('node').forEach(neighbor => {
+            neighbor.unselect();
+            const nIdx = selectedNodeIds.indexOf(neighbor.id());
+            if (nIdx > -1) {
+              selectedNodeIds.splice(nIdx, 1);
+            }
+          });
+        } finally {
+          window._selectingNeighbors = false;
+        }
+      }
+
       updateWorkspaceScope();
       if (selectedNodeIds.length === 0) {
         showEmptyDetails();
       } else if (selectedNodeIds.length === 1) {
         const el = cy.getElementById(selectedNodeIds[0]);
         if (el && el.length) showNodeDetails(el);
+      } else {
+        document.getElementById('detailName').textContent = selectedNodeIds.length + ' nodes selected';
+        document.getElementById('detailType').textContent = 'Multi-select mode';
+        document.getElementById('emptyState').style.display = 'none';
+        document.getElementById('detailsContent').style.display = 'block';
+        document.getElementById('impactList').innerHTML = `<div class="details-panel__impact-item"><span class="mono">${selectedNodeIds.length} nodes in scope</span></div>`;
+        document.getElementById('callPaths').innerHTML = `<span class="mono">Use the Requirements Workspace to generate documentation for this selection.</span>`;
       }
     });
 
@@ -1541,16 +1947,28 @@ console.log('main.js loaded');
       container: document.getElementById('cy'),
       elements: {
         nodes: graph.nodes.map(n => ({
-          data: { id: n.id, label: n.label, type: n.type, name: n.label },
-          style: { 'background-color': `var(--node-${n.type})`, 'border-color': `var(--node-${n.type})` }
+          data: {
+            id: n.id,
+            label: n.label,
+            type: n.type,
+            name: n.label,
+            bgColor: getColorForType(n.type),
+            borderColor: getColorForType(n.type)
+          }
         })),
-        edges: graph.edges.map(e => ({ data: { ...e, id: e.source + '-' + e.target } }))
+        edges: graph.edges.map(e => ({
+          data: {
+            ...e,
+            id: e.source + '-' + e.target,
+            edgeColor: getColorForType(e.type === 'imports' ? 'edge-import' : 'edge-call')
+          }
+        }))
       },
       style: [
-        { selector: 'node', style: { 'width': '36px', 'height': '36px', 'border-width': 2, 'border-color': 'data(border-color)', 'border-opacity': 0.8, 'label': 'data(label)', 'font-size': '11px', 'font-family': "'Inter', -apple-system, sans-serif", 'color': isDark ? '#F0F6FC' : '#1F2328', 'text-valign': 'bottom', 'text-halign': 'center', 'text-outline-width': 2, 'text-outline-color': isDark ? '#0D1117' : '#FFFFFF', 'text-outline-opacity': 1, 'text-margin-y': 6, 'text-wrap': 'wrap', 'text-max-width': '60px' } },
-        { selector: 'node:selected', style: { 'border-width': 4, 'border-color': 'var(--theme-primary)', 'border-opacity': 1, 'width': '44px', 'height': '44px', 'background-opacity': 0.9 } },
-        { selector: 'edge', style: { 'width': 2, 'line-color': 'var(--edge-call)', 'target-arrow-color': 'var(--edge-call)', 'target-arrow-shape': 'triangle', 'source-arrow-shape': 'none', 'arrow-scale': 1.2, 'curve-style': 'bezier', 'label': 'data(type)', 'font-size': '9px', 'font-family': "'Inter', sans-serif", 'color': isDark ? '#8B949E' : '#656D76', 'text-outline-width': 1, 'text-outline-color': isDark ? '#0D1117' : '#FFFFFF', 'text-margin-y': -6, 'control-point-distance': 20, 'control-point-weight': 0.5 } },
-        { selector: 'edge[type="imports"]', style: { 'line-style': 'dashed', 'line-color': 'var(--edge-import)', 'target-arrow-color': 'var(--edge-import)', 'width': 1.5 } }
+        { selector: 'node', style: { 'width': '36px', 'height': '36px', 'background-color': 'data(bgColor)', 'border-width': 2, 'border-color': 'data(borderColor)', 'border-opacity': 0.8, 'label': 'data(label)', 'font-size': '11px', 'font-family': "'Inter', -apple-system, sans-serif", 'color': isDark ? '#F0F6FC' : '#1F2328', 'text-valign': 'bottom', 'text-halign': 'center', 'text-outline-width': 0, 'text-margin-y': 6, 'text-wrap': 'wrap', 'text-max-width': '60px' } },
+        { selector: 'node:selected', style: { 'border-width': 4, 'border-color': isDark ? '#58A6FF' : '#0969DA', 'border-opacity': 1, 'width': '42px', 'height': '42px', 'background-opacity': 1, 'color': isDark ? '#58A6FF' : '#0969DA', 'font-weight': 'bold', 'overlay-color': isDark ? '#58A6FF' : '#0969DA', 'overlay-padding': 6, 'overlay-opacity': 0.15 } },
+        { selector: 'edge', style: { 'width': 2, 'line-color': 'data(edgeColor)', 'target-arrow-color': 'data(edgeColor)', 'target-arrow-shape': 'triangle', 'source-arrow-shape': 'none', 'arrow-scale': 1.2, 'curve-style': 'bezier', 'label': 'data(type)', 'font-size': '9px', 'font-family': "'Inter', sans-serif", 'color': isDark ? '#8B949E' : '#656D76', 'text-outline-width': 0, 'text-margin-y': -6, 'control-point-distance': 20, 'control-point-weight': 0.5 } },
+        { selector: 'edge[type="imports"]', style: { 'line-style': 'dashed', 'line-color': 'data(edgeColor)', 'target-arrow-color': 'data(edgeColor)', 'width': 1.5 } }
       ],
       layout: { name: 'cose', idealEdgeLength: 100, nodeRepulsion: 8000, nestingFactor: 1.2, gravity: 0.3, numIter: 1000, refresh: 20, fit: true, padding: 40 },
       userZoomingEnabled: true,
@@ -1569,6 +1987,9 @@ console.log('main.js loaded');
     buildFileTree();
     showEmptyDetails();
     updateRepoSourceInfo();
+    if (typeof window.applyWorkspaceFilters === 'function') {
+      window.applyWorkspaceFilters();
+    }
     console.log('✅ Graph loaded with', graph.nodes.length, 'nodes and', graph.edges.length, 'edges.');
   }
 
@@ -1828,6 +2249,42 @@ console.log('main.js loaded');
         setTheme(e.matches ? 'dark' : 'light');
       }
     });
+
+    const graphTimeSlider = document.getElementById('graphTimeSlider');
+    if (graphTimeSlider) {
+      graphTimeSlider.addEventListener('input', (e) => {
+        const idx = parseInt(e.target.value, 10);
+        const selected = currentTimelineCommits[idx];
+        if (selected) {
+          console.log(`Selected commit SHA (from slider): ${selected.sha}`);
+          service.currentCommitSHA = selected.sha;
+
+          const commitTimelineRail = document.getElementById('commitTimelineRail');
+          if (commitTimelineRail) {
+            commitTimelineRail.querySelectorAll('.commit-card').forEach(cc => {
+              if (cc.dataset.sha === selected.sha) {
+                cc.style.borderColor = 'var(--theme-primary)';
+                cc.style.background = 'var(--theme-surface)';
+                cc.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+              } else {
+                cc.style.borderColor = 'var(--theme-border)';
+                cc.style.background = 'var(--theme-surface-elevated)';
+              }
+            });
+          }
+
+          const dateEl = document.getElementById('sliderCommitDate');
+          const shaEl = document.getElementById('sliderCommitSha');
+          if (dateEl) dateEl.textContent = selected.date ? new Date(selected.date).toLocaleString() : 'No date';
+          if (shaEl) shaEl.textContent = selected.sha ? selected.sha.substring(0, 7) : '—';
+
+          updateRuleEvolutionHighlights();
+
+          loadGraph();
+          loadVersionedFileTree(selected.sha);
+        }
+      });
+    }
 
     // Wire up offline banner action buttons
     const offlineRetryBtn = document.getElementById('offlineRetryBtn');
