@@ -27,7 +27,6 @@ console.log('main.js loaded');
     const current = document.documentElement.getAttribute('data-theme') || 'dark';
     const next = current === 'dark' ? 'light' : 'dark';
     setTheme(next);
-    loadGraph();
   };
   const updateUI = (theme) => {
     const icon = document.getElementById('themeIcon');
@@ -65,22 +64,48 @@ console.log('main.js loaded');
 
     async safeFetch(url, options = {}) {
       try {
-        const resp = await fetch(url, options);
+        let resp;
+        try {
+          resp = await fetch(url, options);
+        } catch (fetchErr) {
+          // If fetch fails and the URL starts with localhost, auto-retry using 127.0.0.1
+          const localhostPrefix = 'http://localhost:';
+          if (url.startsWith(localhostPrefix)) {
+            const fallbackUrl = url.replace(localhostPrefix, 'http://127.0.0.1:');
+            console.log(`[CORS/Network Fallback] Retrying ${url} using ${fallbackUrl}`);
+            resp = await fetch(fallbackUrl, options);
+
+            // If the fallback succeeded and it is a request to our baseUrl, permanently update baseUrl to use 127.0.0.1
+            if (url.startsWith(this.baseUrl)) {
+              this.baseUrl = this.baseUrl.replace(localhostPrefix, 'http://127.0.0.1:');
+              localStorage.setItem('code-intel-server-url', this.baseUrl);
+              console.log(`[CORS/Network Fallback] Migrated baseUrl to ${this.baseUrl}`);
+            }
+          } else {
+            throw fetchErr;
+          }
+        }
+
+        const normUrl = url.replace('http://localhost:', 'http://127.0.0.1:');
+        const normBase = this.baseUrl.replace('http://localhost:', 'http://127.0.0.1:');
+
         if (!resp.ok) {
           if (resp.status === 502 || resp.status === 503) {
-            if (url.startsWith(this.baseUrl)) {
+            if (normUrl.startsWith(normBase)) {
               triggerOfflineMode(true);
             }
           }
           throw new Error(`Fetch failed with status ${resp.status}`);
         }
-        if (url.startsWith(this.baseUrl)) {
+        if (normUrl.startsWith(normBase)) {
           triggerOfflineMode(false);
         }
         return resp;
       } catch (e) {
+        const normUrl = url.replace('http://localhost:', 'http://127.0.0.1:');
+        const normBase = this.baseUrl.replace('http://localhost:', 'http://127.0.0.1:');
         const isNetworkErr = e instanceof TypeError || /Failed to fetch|NetworkError|CORS|TypeError/i.test(e.message || String(e));
-        if (isNetworkErr && url.startsWith(this.baseUrl)) {
+        if (isNetworkErr && normUrl.startsWith(normBase)) {
           triggerOfflineMode(true);
         }
         throw e;
@@ -89,7 +114,13 @@ console.log('main.js loaded');
 
     async connect() {
       try {
-        const resp = await this.safeFetch(`${this.baseUrl}/api/status`, { signal: getTimeoutSignal(3000) });
+        let resp;
+        try {
+          resp = await this.safeFetch(`${this.baseUrl}/api/status`, { signal: getTimeoutSignal(3000) });
+        } catch (apiErr) {
+          console.log('GET /api/status failed, trying fallback /status...');
+          resp = await this.safeFetch(`${this.baseUrl}/status`, { signal: getTimeoutSignal(3000) });
+        }
         const data = await resp.json();
         this.connected = true;
         this.connectError = null;
@@ -188,75 +219,58 @@ console.log('main.js loaded');
     }
 
     getDemoGraphData() {
-      const allNodes = [
-        { id: 'n1', label: 'AuthService', type: 'class' },
-        { id: 'n2', label: 'login', type: 'function' },
-        { id: 'n3', label: 'validateUser', type: 'function' },
-        { id: 'n4', label: 'hashPassword', type: 'function' },
-        { id: 'n5', label: 'UserRepository', type: 'class' },
-        { id: 'n6', label: 'findByEmail', type: 'function' },
-        { id: 'n7', label: 'DatabaseConnection', type: 'class' },
-        { id: 'n8', label: 'query', type: 'function' },
-        { id: 'n9', label: 'Logger', type: 'class' },
-        { id: 'n10', label: 'log', type: 'function' },
-        { id: 'n11', label: 'ConfigService', type: 'class' },
-        { id: 'n12', label: 'getSecret', type: 'function' },
-        { id: 'n13', label: 'TokenService', type: 'class' },
-        { id: 'n14', label: 'generateToken', type: 'function' },
-        { id: 'n15', label: 'verifyToken', type: 'function' },
-        { id: 'n16', label: 'EmailService', type: 'class' },
-        { id: 'n17', label: 'sendWelcome', type: 'function' },
-        { id: 'n18', label: 'User', type: 'class' },
-        { id: 'n19', label: 'Role', type: 'enum' },
-        { id: 'n20', label: 'main', type: 'function' },
-      ];
-
-      const allEdges = [
-        { source: 'n2', target: 'n3', type: 'calls' },
-        { source: 'n2', target: 'n4', type: 'calls' },
-        { source: 'n2', target: 'n5', type: 'calls' },
-        { source: 'n3', target: 'n6', type: 'calls' },
-        { source: 'n3', target: 'n18', type: 'calls' },
-        { source: 'n6', target: 'n7', type: 'calls' },
-        { source: 'n6', target: 'n8', type: 'calls' },
-        { source: 'n5', target: 'n7', type: 'calls' },
-        { source: 'n1', target: 'n9', type: 'calls' },
-        { source: 'n1', target: 'n11', type: 'calls' },
-        { source: 'n1', target: 'n13', type: 'calls' },
-        { source: 'n14', target: 'n12', type: 'calls' },
-        { source: 'n14', target: 'n10', type: 'calls' },
-        { source: 'n15', target: 'n12', type: 'calls' },
-        { source: 'n16', target: 'n17', type: 'calls' },
-        { source: 'n17', target: 'n10', type: 'calls' },
-        { source: 'n20', target: 'n1', type: 'calls' },
-        { source: 'n20', target: 'n16', type: 'calls' },
-        { source: 'n20', target: 'n14', type: 'calls' },
-        { source: 'n2', target: 'n1', type: 'imports' },
-        { source: 'n3', target: 'n5', type: 'imports' },
-        { source: 'n6', target: 'n7', type: 'imports' },
-        { source: 'n14', target: 'n11', type: 'imports' },
-        { source: 'n17', target: 'n9', type: 'imports' },
-        { source: 'n5', target: 'n18', type: 'imports' },
-        { source: 'n1', target: 'n18', type: 'imports' },
-      ];
-
-      // Filter based on selected mock commit
-      let visibleNodeIds = new Set();
-      const sha = this.currentCommitSHA;
-      if (!sha || sha === 'c333333333333333333333333333333333333333') {
-        allNodes.forEach(n => visibleNodeIds.add(n.id));
-      } else if (sha === 'c222222222222222222222222222222222222222') {
-        const ids = ['n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7', 'n8', 'n9', 'n10', 'n11', 'n12', 'n13', 'n14', 'n15', 'n18'];
-        ids.forEach(id => visibleNodeIds.add(id));
-      } else {
-        const ids = ['n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7', 'n8', 'n18'];
-        ids.forEach(id => visibleNodeIds.add(id));
-      }
-
-      const nodes = allNodes.filter(n => visibleNodeIds.has(n.id));
-      const edges = allEdges.filter(e => visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target));
-
-      return { nodes, edges };
+      return {
+        nodes: [
+          { id: 'n1', label: 'AuthService', type: 'class' },
+          { id: 'n2', label: 'login', type: 'function' },
+          { id: 'n3', label: 'validateUser', type: 'function' },
+          { id: 'n4', label: 'hashPassword', type: 'function' },
+          { id: 'n5', label: 'UserRepository', type: 'class' },
+          { id: 'n6', label: 'findByEmail', type: 'function' },
+          { id: 'n7', label: 'DatabaseConnection', type: 'class' },
+          { id: 'n8', label: 'query', type: 'function' },
+          { id: 'n9', label: 'Logger', type: 'class' },
+          { id: 'n10', label: 'log', type: 'function' },
+          { id: 'n11', label: 'ConfigService', type: 'class' },
+          { id: 'n12', label: 'getSecret', type: 'function' },
+          { id: 'n13', label: 'TokenService', type: 'class' },
+          { id: 'n14', label: 'generateToken', type: 'function' },
+          { id: 'n15', label: 'verifyToken', type: 'function' },
+          { id: 'n16', label: 'EmailService', type: 'class' },
+          { id: 'n17', label: 'sendWelcome', type: 'function' },
+          { id: 'n18', label: 'User', type: 'class' },
+          { id: 'n19', label: 'Role', type: 'enum' },
+          { id: 'n20', label: 'main', type: 'function' },
+        ],
+        edges: [
+          { source: 'n2', target: 'n3', type: 'calls' },
+          { source: 'n2', target: 'n4', type: 'calls' },
+          { source: 'n2', target: 'n5', type: 'calls' },
+          { source: 'n3', target: 'n6', type: 'calls' },
+          { source: 'n3', target: 'n18', type: 'calls' },
+          { source: 'n6', target: 'n7', type: 'calls' },
+          { source: 'n6', target: 'n8', type: 'calls' },
+          { source: 'n5', target: 'n7', type: 'calls' },
+          { source: 'n1', target: 'n9', type: 'calls' },
+          { source: 'n1', target: 'n11', type: 'calls' },
+          { source: 'n1', target: 'n13', type: 'calls' },
+          { source: 'n14', target: 'n12', type: 'calls' },
+          { source: 'n14', target: 'n10', type: 'calls' },
+          { source: 'n15', target: 'n12', type: 'calls' },
+          { source: 'n16', target: 'n17', type: 'calls' },
+          { source: 'n17', target: 'n10', type: 'calls' },
+          { source: 'n20', target: 'n1', type: 'calls' },
+          { source: 'n20', target: 'n16', type: 'calls' },
+          { source: 'n20', target: 'n14', type: 'calls' },
+          { source: 'n2', target: 'n1', type: 'imports' },
+          { source: 'n3', target: 'n5', type: 'imports' },
+          { source: 'n6', target: 'n7', type: 'imports' },
+          { source: 'n14', target: 'n11', type: 'imports' },
+          { source: 'n17', target: 'n9', type: 'imports' },
+          { source: 'n5', target: 'n18', type: 'imports' },
+          { source: 'n1', target: 'n18', type: 'imports' },
+        ]
+      };
     }
 
     // === MCP Discovery ===
@@ -296,37 +310,16 @@ console.log('main.js loaded');
   let selectedNodeIds = [];
   let currentRepoTree = null;
   let currentRepoSource = 'Demo project';
+  let currentRepoGitUrl = '';
+  let originalRepoSource = '';
+  let promptingForIngestion = false;
+  let hasLoadedRepo = false;
+  let activeIngestingBranch = '';
+  let activeIngestingVersion = '';
+  let requirementsRawMarkdown = '';
+  let requirementsJsonTasks = null;
+  let requirementsViewMode = 'markdown'; // 'markdown' or 'json'
   let activeEventSource = null;
-  let currentTimelineCommits = [];
-
-  function updateTimeSliderUI() {
-    const container = document.getElementById('timeSliderContainer');
-    const slider = document.getElementById('graphTimeSlider');
-    const dateEl = document.getElementById('sliderCommitDate');
-    const shaEl = document.getElementById('sliderCommitSha');
-
-    if (!container || !slider) return;
-
-    if (service.demoMode || !currentTimelineCommits || currentTimelineCommits.length === 0) {
-      container.style.display = 'none';
-      return;
-    }
-
-    container.style.display = 'flex';
-    slider.min = 0;
-    slider.max = currentTimelineCommits.length - 1;
-
-    let idx = currentTimelineCommits.findIndex(c => c.sha === service.currentCommitSHA);
-    if (idx === -1) idx = 0;
-
-    slider.value = idx;
-
-    const currentCommit = currentTimelineCommits[idx];
-    if (currentCommit) {
-      if (dateEl) dateEl.textContent = currentCommit.date ? new Date(currentCommit.date).toLocaleString() : 'No date';
-      if (shaEl) shaEl.textContent = currentCommit.sha ? currentCommit.sha.substring(0, 7) : '—';
-    }
-  }
 
   function subscribeToIngestionStream(jobId) {
     if (!jobId) {
@@ -402,12 +395,26 @@ console.log('main.js loaded');
           es.close();
           activeEventSource = null;
 
+          const resolvedRepoPath = payload.repo_path || payload.path || payload.local_path || currentRepoSource;
+          const resolvedBranch = payload.branch || (document.getElementById('remoteRepoBranchInput') ? document.getElementById('remoteRepoBranchInput').value.trim() : 'main') || 'main';
+          const resolvedVersion = payload.version || payload.commit_sha || payload.sha || 'latest';
+
+          if (resolvedRepoPath) {
+            currentRepoSource = resolvedRepoPath;
+            updateRepoSourceInfo();
+          }
+
+          // Save run detail to session persistence
+          if (resolvedRepoPath && resolvedVersion) {
+            saveSessionAndHistory(resolvedRepoPath, resolvedBranch, resolvedVersion);
+          }
+
           // Workspace loading cycle trigger: load dynamic graph
           setTimeout(() => {
             if (progressContainer) progressContainer.style.display = 'none';
             // Trigger workspace loading cycle
             loadGraph();
-            loadBranchesAndCommits();
+            loadBranchesAndCommits(resolvedBranch);
           }, 1500);
         }
       } catch (err) {
@@ -418,109 +425,138 @@ console.log('main.js loaded');
     es.onerror = (err) => {
       console.error('SSE Error/Close:', err);
       // Under SSE, if server completes stream and closes, onerror triggers.
-      // If we are closed or disconnected, we close event source to prevent infinite auto-reconnections.
+      // We close the EventSource to prevent infinite automatic reconnection loop.
       if (es.readyState === EventSource.CLOSED || es.readyState === EventSource.CONNECTING) {
-        // SSE natively reconnects on some errors, but we can close it if the job is done or offline
-        console.log('SSE connection closed or connecting. Active status:', es.readyState);
+        console.log('Closing SSE connection to prevent infinite auto-reconnections. Active status:', es.readyState);
+        es.close();
+        if (activeEventSource === es) {
+          activeEventSource = null;
+        }
       }
     };
   }
 
-  async function loadBranchesAndCommits() {
+  async function promptForBranchIngestion(branch) {
+    const repoPath = currentRepoGitUrl || originalRepoSource || currentRepoSource;
+    if (!repoPath || repoPath === 'Demo project') {
+      alert('Cannot trigger ingestion: original repository path/URL is unknown.');
+      return;
+    }
+
+    const confirmIngestion = confirm(
+      `⚠️ [Branch Not Analyzed]\n\nThe branch "${branch}" has not been parsed by the backend yet.\n\nWould you like to trigger cloning and parsing for this branch now?`
+    );
+
+    if (confirmIngestion) {
+      const cloneBtn = document.getElementById('cloneRemoteBtn');
+      const originalBtnText = cloneBtn ? cloneBtn.textContent : 'Clone & Ingest';
+      if (cloneBtn) {
+        cloneBtn.disabled = true;
+        cloneBtn.textContent = 'Ingesting...';
+      }
+
+      try {
+        const timeoutVal = parseInt(localStorage.getItem('code-intel-ingestion-timeout') || '300', 10);
+        const payload = {
+          repo_path: repoPath,
+          branch: branch,
+          timeout: timeoutVal
+        };
+
+        activeIngestingBranch = branch;
+        activeIngestingVersion = '';
+
+        const resp = await service.safeFetch(`${service.baseUrl}/analyze`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await resp.json();
+        console.log(`Ingestion for branch ${branch} triggered successfully:`, data);
+        alert(`Analysis triggered successfully for branch ${branch}!\nJob ID: ${data.job_id || 'started'}`);
+
+        if (data.job_id) {
+          subscribeToIngestionStream(data.job_id);
+        } else {
+          loadGraph();
+          loadBranchesAndCommits(branch);
+        }
+      } catch (err) {
+        console.error('Failed to trigger ingestion for branch:', err);
+        alert('Failed to trigger ingestion. Error: ' + err.message);
+      } finally {
+        if (cloneBtn) {
+          cloneBtn.disabled = false;
+          cloneBtn.textContent = originalBtnText;
+        }
+      }
+    }
+  }
+
+  async function loadBranchesAndCommits(selectedBranch = null) {
+    if (!currentRepoSource || service.demoMode) {
+      return;
+    }
+
     const branchSelector = document.getElementById('branchSelector');
     const commitTimelineRail = document.getElementById('commitTimelineRail');
 
-    if (service.demoMode) {
-      const branches = ['main', 'dev'];
-      const commits = [
-        { sha: 'c333333333333333333333333333333333333333', date: '2026-07-27T14:30:00Z', author: 'Charlie', msg: 'Add Email Service and Main' },
-        { sha: 'c222222222222222222222222222222222222222', date: '2026-07-20T10:15:00Z', author: 'Bob', msg: 'Add Config and Token Services' },
-        { sha: 'c111111111111111111111111111111111111111', date: '2026-07-10T09:00:00Z', author: 'Alice', msg: 'Initial Commit' }
-      ];
+    console.log(`loadBranchesAndCommits: Fetching for ${currentRepoSource}, branch: ${selectedBranch}`);
 
-      currentTimelineCommits = commits;
-
-      // 1. Populate branch dropdown
-      if (branchSelector) {
-        branchSelector.innerHTML = branches.map(b => `<option value="${b}">${b}</option>`).join('');
-      }
-
-      // 2. Populate commit timeline rail
-      if (commitTimelineRail) {
-        commitTimelineRail.innerHTML = commits.map(c => {
-          const shortSha = c.sha.substring(0, 7);
-          const author = c.author;
-          const dateStr = new Date(c.date).toLocaleString();
-          const borderStyle = service.currentCommitSHA === c.sha ? 'var(--theme-primary)' : 'var(--theme-border)';
-          const bgStyle = service.currentCommitSHA === c.sha ? 'var(--theme-surface)' : 'var(--theme-surface-elevated)';
-          return `
-            <div class="commit-card" data-sha="${c.sha}" style="padding: var(--space-sm); border: 1px solid ${borderStyle}; border-radius: var(--radius-sm); background: ${bgStyle}; cursor: pointer; transition: all 150ms ease; display: flex; flex-direction: column; gap: 2px;">
-              <div style="display: flex; justify-content: space-between; align-items: center; pointer-events: none;">
-                <span style="font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--theme-primary);">${shortSha}</span>
-                <span style="font-size: 10px; color: var(--theme-text-dim);">${dateStr}</span>
-              </div>
-              <div style="font-size: 11px; font-weight: 500; color: var(--theme-text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap; pointer-events: none;">by ${author}</div>
-              <div style="font-size: 10px; color: var(--theme-text-secondary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap; pointer-events: none;">${c.msg}</div>
-            </div>
-          `;
-        }).join('');
-
-        // 3. Bind click listeners to commit cards
-        commitTimelineRail.querySelectorAll('.commit-card').forEach(card => {
-          card.addEventListener('click', () => {
-            commitTimelineRail.querySelectorAll('.commit-card').forEach(cc => {
-              cc.style.borderColor = 'var(--theme-border)';
-              cc.style.background = 'var(--theme-surface-elevated)';
-            });
-            card.style.borderColor = 'var(--theme-primary)';
-            card.style.background = 'var(--theme-surface)';
-
-            const sha = card.dataset.sha;
-            console.log(`Demo commit card clicked. Selecting SHA: ${sha}`);
-            service.currentCommitSHA = sha;
-
-            // Update time slider UI to match selection
-            updateTimeSliderUI();
-
-            // Update rule evolution highlights
-            updateRuleEvolutionHighlights();
-
-            // Trigger graph load
-            loadGraph();
-          });
-        });
-      }
-
-      if (!service.currentCommitSHA) {
-        service.currentCommitSHA = commits[0].sha;
-      }
-      updateTimeSliderUI();
-      return;
+    if (commitTimelineRail) {
+      commitTimelineRail.innerHTML = `<div style="padding: var(--space-sm); text-align: center; color: var(--theme-text-dim); font-size: 11px;">🔄 Loading commits...</div>`;
     }
-
-    if (!currentRepoSource) {
-      return;
-    }
-
-    console.log(`loadBranchesAndCommits: Fetching for ${currentRepoSource}`);
 
     try {
-      const resp = await service.safeFetch(`${service.baseUrl}/repo/branches-and-commits?repo_path=${encodeURIComponent(currentRepoSource)}`);
+      let url = `${service.baseUrl}/repo/branches-and-commits?repo_path=${encodeURIComponent(currentRepoSource)}`;
+      if (selectedBranch) {
+        url += `&branch=${encodeURIComponent(selectedBranch)}`;
+      }
+      const resp = await service.safeFetch(url);
       const data = await resp.json();
       const branches = data.branches || [];
       const commits = data.commits || [];
 
-      currentTimelineCommits = commits;
-
-      // 1. Populate branch dropdown
+      // 1. Populate branch dropdown only if empty or first load to avoid resetting focus/value during change event
       if (branchSelector) {
-        branchSelector.innerHTML = branches.map(b => `<option value="${b}">${b}</option>`).join('');
+        let activeBranch = selectedBranch || branchSelector.value;
+        let branchesList = [...branches];
+        if (branchesList.length === 0) {
+          branchesList = [activeBranch || 'main'];
+        }
+        if (!activeBranch && branchesList.length > 0) {
+          activeBranch = branchesList.includes('main') ? 'main' : (branchesList.includes('master') ? 'master' : branchesList[0]);
+        }
+
+        const currentOptions = Array.from(branchSelector.options).map(opt => opt.value);
+        const listsMatch = currentOptions.length === branchesList.length && currentOptions.every((v, i) => v === branchesList[i]);
+
+        if (!listsMatch || branchSelector.children.length <= 1) {
+          branchSelector.innerHTML = branchesList.map(b => {
+            const selectedAttr = b === activeBranch ? ' selected' : '';
+            return `<option value="${b}"${selectedAttr}>${b}</option>`;
+          }).join('');
+        } else {
+          branchSelector.value = activeBranch;
+        }
       }
 
       // 2. Populate commit timeline rail
       if (commitTimelineRail) {
         if (commits.length === 0) {
-          commitTimelineRail.innerHTML = `<div style="padding: var(--space-sm); text-align: center; color: var(--theme-text-dim); font-size: 11px;">No commits found</div>`;
+          commitTimelineRail.innerHTML = `
+            <div style="padding: var(--space-sm); text-align: center; color: var(--theme-text-dim); font-size: 11px; display: flex; flex-direction: column; gap: var(--space-xs); align-items: center;">
+              <span>No commits found for branch <strong>${selectedBranch || 'main'}</strong></span>
+              <button class="sidebar__action-button" id="timelineAnalyzeBranchBtn" style="font-size: 10px; padding: 2px 6px; cursor: pointer; font-weight: 500;">⚙️ Analyze Branch</button>
+            </div>
+          `;
+          const btn = document.getElementById('timelineAnalyzeBranchBtn');
+          if (btn) {
+            btn.addEventListener('click', () => {
+              promptForBranchIngestion(selectedBranch || 'main');
+            });
+          }
         } else {
           commitTimelineRail.innerHTML = commits.map(c => {
             const shortSha = c.sha ? c.sha.substring(0, 7) : '—';
@@ -551,11 +587,8 @@ console.log('main.js loaded');
               console.log(`Commit card clicked. Selecting SHA: ${sha}`);
               service.currentCommitSHA = sha;
 
-              // Update time slider UI to match selection
-              updateTimeSliderUI();
-
-              // Update rule evolution highlights
-              updateRuleEvolutionHighlights();
+              const activeBranch = branchSelector ? branchSelector.value : 'main';
+              saveSessionAndHistory(currentRepoSource, activeBranch, sha);
 
               // Trigger graph load and versioned file tree load
               loadGraph();
@@ -564,18 +597,116 @@ console.log('main.js loaded');
           });
         }
 
-        // Auto-load matching versioned file tree for latest commit on first load
+        // Auto-load matching versioned file tree and load graph for latest commit on first load or branch change
         if (commits.length > 0) {
-          const latestSHA = commits[0].sha;
-          service.currentCommitSHA = latestSHA;
-          loadVersionedFileTree(latestSHA);
-        }
+          const commitShas = commits.map(c => c.sha);
+          const hasCurrentCommitInList = service.currentCommitSHA && commitShas.includes(service.currentCommitSHA);
 
-        updateTimeSliderUI();
+          if (!hasCurrentCommitInList) {
+            const latestSHA = commits[0].sha;
+            service.currentCommitSHA = latestSHA;
+            loadGraph();
+            loadVersionedFileTree(latestSHA);
+          } else {
+            // Highlight the active commit card in the timeline rail
+            commitTimelineRail.querySelectorAll('.commit-card').forEach(cc => {
+              if (cc.dataset.sha === service.currentCommitSHA) {
+                cc.style.borderColor = 'var(--theme-primary)';
+                cc.style.background = 'var(--theme-surface)';
+              } else {
+                cc.style.borderColor = 'var(--theme-border)';
+                cc.style.background = 'var(--theme-surface-elevated)';
+              }
+            });
+            // Also ensure we load the file tree and graph for the current active commit
+            loadGraph();
+            loadVersionedFileTree(service.currentCommitSHA);
+          }
+        }
       }
     } catch (e) {
       console.warn('Failed to load branches and commits:', e);
+      if (commitTimelineRail) {
+        commitTimelineRail.innerHTML = `
+          <div style="padding: var(--space-sm); text-align: center; color: var(--theme-danger); font-size: 11px; display: flex; flex-direction: column; gap: var(--space-xs); align-items: center;">
+            <span>⚠️ Failed to load commits</span>
+            <button class="sidebar__action-button" id="timelineAnalyzeBranchFailBtn" style="font-size: 10px; padding: 2px 6px; cursor: pointer;">⚙️ Analyze Branch</button>
+          </div>
+        `;
+        const btn = document.getElementById('timelineAnalyzeBranchFailBtn');
+        if (btn) {
+          btn.addEventListener('click', () => {
+            promptForBranchIngestion(selectedBranch || 'main');
+          });
+        }
+      }
     }
+  }
+
+  async function promptForCommitIngestion(commitSHA, skipConfirm = false) {
+    if (promptingForIngestion) return;
+    promptingForIngestion = true;
+
+    const shortSha = commitSHA ? commitSHA.substring(0, 7) : '';
+    let confirmIngestion = true;
+    if (!skipConfirm) {
+      confirmIngestion = confirm(
+        `⚠️ [Commit Not Analyzed]\n\nThe historical commit "${shortSha}" has not been parsed by the backend yet.\n\nWould you like to trigger cloning and parsing for this specific commit now?`
+      );
+    }
+
+    if (confirmIngestion) {
+      const repoPath = currentRepoGitUrl || originalRepoSource || currentRepoSource;
+      if (!repoPath || repoPath === 'Demo project') {
+        alert('Cannot trigger ingestion: original repository path/URL is unknown.');
+        promptingForIngestion = false;
+        return;
+      }
+
+      // Show ingestion progress block
+      const cloneBtn = document.getElementById('cloneRemoteBtn');
+      const originalBtnText = cloneBtn ? cloneBtn.textContent : 'Clone & Ingest';
+      if (cloneBtn) {
+        cloneBtn.disabled = true;
+        cloneBtn.textContent = 'Ingesting...';
+      }
+
+      try {
+        const timeoutVal = parseInt(localStorage.getItem('code-intel-ingestion-timeout') || '300', 10);
+        const payload = {
+          repo_path: repoPath,
+          version: commitSHA,
+          timeout: timeoutVal
+        };
+
+        const resp = await service.safeFetch(`${service.baseUrl}/analyze`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await resp.json();
+        console.log(`Ingestion for commit ${commitSHA} triggered successfully:`, data);
+        alert(`Analysis triggered successfully for commit ${shortSha}!\nJob ID: ${data.job_id || 'started'}`);
+
+        if (data.job_id) {
+          subscribeToIngestionStream(data.job_id);
+        } else {
+          loadGraph();
+          loadVersionedFileTree(commitSHA);
+        }
+      } catch (err) {
+        console.error('Failed to trigger ingestion for older commit:', err);
+        alert('Failed to trigger ingestion. Error: ' + err.message);
+      } finally {
+        if (cloneBtn) {
+          cloneBtn.disabled = false;
+          cloneBtn.textContent = originalBtnText;
+        }
+      }
+    }
+
+    promptingForIngestion = false;
   }
 
   async function loadVersionedFileTree(commitSHA) {
@@ -586,7 +717,53 @@ console.log('main.js loaded');
     try {
       const resp = await service.safeFetch(`${service.baseUrl}/repo/tree?version=${encodeURIComponent(commitSHA)}`);
       const data = await resp.json();
-      currentRepoTree = data;
+
+      // Fallback retry or prompt ingestion: if specific commitSHA has no files (e.g. bitemporal disabled or empty DB snapshot)
+      if ((!data || Object.keys(data).length === 0) && commitSHA !== 'latest') {
+        console.log(`loadVersionedFileTree: Tree for ${commitSHA} is empty. Rendering choices in sidebar.`);
+
+        const container = document.getElementById('fileTree');
+        if (container) {
+          const shortSha = commitSHA.substring(0, 7);
+          container.innerHTML = `
+            <div class="sidebar__unparsed-commit-choices" style="padding: var(--space-md); text-align: center; display: flex; flex-direction: column; gap: var(--space-sm); border: 1px dashed var(--theme-border); border-radius: var(--radius-md); background: var(--theme-surface); margin: var(--space-sm);">
+              <div style="font-size: 12px; font-weight: 600; color: var(--theme-text-primary);">Unanalyzed Commit</div>
+              <div style="font-size: 11px; color: var(--theme-text-secondary); margin-bottom: var(--space-xs);">The snapshot <strong style="font-family: var(--font-mono); color: var(--theme-primary);">${shortSha}</strong> has not been parsed by the backend.</div>
+              <button class="sidebar__action-button" id="sidebarAnalyzeCommitBtn" style="width: 100%; font-size: 11px; padding: 6px var(--space-sm); font-weight: 600; background: var(--theme-primary); color: white; border: none; border-radius: var(--radius-sm); cursor: pointer;">⚙️ Analyze Commit</button>
+              <button class="sidebar__action-button" id="sidebarFallbackLatestBtn" style="width: 100%; font-size: 11px; padding: 6px var(--space-sm); font-weight: 500; background: var(--theme-surface-elevated); color: var(--theme-text-primary); border: 1px solid var(--theme-border); border-radius: var(--radius-sm); cursor: pointer;">🔄 Load Fallback (Latest)</button>
+            </div>
+          `;
+
+          // Bind listeners to buttons
+          const analyzeBtn = document.getElementById('sidebarAnalyzeCommitBtn');
+          if (analyzeBtn) {
+            analyzeBtn.addEventListener('click', () => {
+              promptForCommitIngestion(commitSHA, true);
+            });
+          }
+
+          const fallbackBtn = document.getElementById('sidebarFallbackLatestBtn');
+          if (fallbackBtn) {
+            fallbackBtn.addEventListener('click', async () => {
+              console.log('User chose fallback to latest.');
+              try {
+                const fallbackResp = await service.safeFetch(`${service.baseUrl}/repo/tree?version=latest`);
+                const fallbackData = await fallbackResp.json();
+                currentRepoTree = fallbackData;
+                buildFileTree();
+                service.currentCommitSHA = 'latest';
+                loadGraph();
+              } catch (fallbackErr) {
+                console.warn('Failed to load fallback latest file tree:', fallbackErr);
+                alert('Failed to load fallback latest file tree: ' + fallbackErr.message);
+              }
+            });
+          }
+        }
+        return;
+      } else {
+        currentRepoTree = data;
+      }
       buildFileTree();
     } catch (e) {
       console.warn('Failed to load versioned file tree:', e);
@@ -595,16 +772,360 @@ console.log('main.js loaded');
 
   function updateRepoSourceInfo() {
     const sourceInfo = document.getElementById('repoSourceInfo');
+    const reanalyzeBtn = document.getElementById('reanalyzeRepoBtn');
+
+    if (reanalyzeBtn) {
+      if (hasLoadedRepo && !service.demoMode) {
+        reanalyzeBtn.style.display = 'inline-block';
+      } else {
+        reanalyzeBtn.style.display = 'none';
+      }
+    }
+
     if (!sourceInfo) return;
     if (service.demoMode) {
       sourceInfo.textContent = 'Source: Demo project';
-    } else if (currentRepoTree) {
-      sourceInfo.textContent = 'Source: Local repository';
     } else if (currentRepoSource) {
       sourceInfo.textContent = `Source: ${currentRepoSource}`;
+    } else if (currentRepoTree) {
+      sourceInfo.textContent = 'Source: Local repository';
     } else {
       sourceInfo.textContent = `Source: ${service.baseUrl}`;
     }
+  }
+
+  // === Session & History Persistence ===
+  function saveSessionAndHistory(repoPath, branch, version) {
+    if (!repoPath || repoPath === 'Demo project') return;
+
+    // 1. Save active session
+    const session = { repo_path: repoPath, branch: branch || 'main', version };
+    localStorage.setItem("code_intel_session", JSON.stringify(session));
+
+    // 2. Append/update history
+    let history = [];
+    try {
+      history = JSON.parse(localStorage.getItem("code_intel_history") || "[]");
+      if (!Array.isArray(history)) history = [];
+    } catch {
+      history = [];
+    }
+
+    const runDetail = {
+      version,
+      branch: branch || 'main',
+      analyzed_at: new Date().toISOString()
+    };
+
+    let existingRepo = history.find(r => r.repo_path === repoPath);
+    if (existingRepo) {
+      if (!Array.isArray(existingRepo.versions)) {
+        existingRepo.versions = [];
+      }
+      // Remove any existing duplicate version run detail to move it to the top
+      existingRepo.versions = existingRepo.versions.filter(v => v.version !== version);
+      existingRepo.versions.unshift(runDetail);
+    } else {
+      history.unshift({
+        repo_path: repoPath,
+        versions: [runDetail]
+      });
+    }
+
+    localStorage.setItem("code_intel_history", JSON.stringify(history));
+
+    // Render the dashboards & sidebars to keep views in sync
+    renderDashboardAndSidebar();
+  }
+
+  function renderDashboardAndSidebar() {
+    const dashboard = document.getElementById('workspaceDashboard');
+    const recentRunsList = document.getElementById('dashboardRecentRunsList');
+    const sidebarAnalyzedList = document.getElementById('sidebarAnalyzedReposList');
+
+    // Toggle dashboard display based on hasLoadedRepo
+    if (dashboard) {
+      if (hasLoadedRepo) {
+        dashboard.style.display = 'none';
+      } else {
+        dashboard.style.display = 'flex';
+      }
+    }
+
+    let history = [];
+    try {
+      history = JSON.parse(localStorage.getItem("code_intel_history") || "[]");
+      if (!Array.isArray(history)) history = [];
+    } catch {
+      history = [];
+    }
+
+    // 1. Render Dashboard list
+    if (recentRunsList) {
+      if (history.length === 0) {
+        recentRunsList.innerHTML = `
+          <div style="padding: var(--space-lg); text-align: center; color: var(--theme-text-dim); background: var(--theme-surface); border: 1px dashed var(--theme-border); border-radius: var(--radius-md); font-size: 12px;">No historical runs found. Analyze a new repository above to begin!</div>
+        `;
+      } else {
+        recentRunsList.innerHTML = history.map((repo, repoIdx) => {
+          const repoName = repo.repo_path.split('/').pop() || repo.repo_path;
+          const versionsHtml = repo.versions.map(v => {
+            const shortSha = v.version ? v.version.substring(0, 7) : '—';
+            const analyzedAt = v.analyzed_at ? new Date(v.analyzed_at).toLocaleString() : '—';
+            return `
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--space-xs) var(--space-sm); border-radius: var(--radius-sm); background: var(--theme-surface-elevated); border: 1px solid var(--theme-border); font-size: 11px; gap: var(--space-sm);">
+                <div style="display: flex; align-items: center; gap: var(--space-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;">
+                  <span style="font-family: var(--font-mono); font-weight: 600; color: var(--theme-primary);">${shortSha}</span>
+                  <span style="color: var(--theme-text-secondary); overflow: hidden; text-overflow: ellipsis;">[${v.branch}]</span>
+                  <span style="color: var(--theme-text-dim); font-size: 10px;">${analyzedAt}</span>
+                </div>
+                <div style="display: flex; gap: var(--space-xs); flex-shrink: 0;">
+                  <button class="sidebar__action-button dashboard-load-run-btn" data-repo="${repo.repo_path}" data-branch="${v.branch}" data-version="${v.version}" style="font-size: 10px; padding: 2px 6px;">Load Run</button>
+                  <button class="sidebar__action-button dashboard-delete-run-btn" data-repo="${repo.repo_path}" data-version="${v.version}" style="font-size: 10px; padding: 2px 6px; background: var(--theme-danger); border-color: var(--theme-danger); color: white;">Delete</button>
+                </div>
+              </div>
+            `;
+          }).join('');
+
+          return `
+            <div style="border: 1px solid var(--theme-border); border-radius: var(--radius-md); background: var(--theme-surface); padding: var(--space-sm); display: flex; flex-direction: column; gap: var(--space-xs);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                <span style="font-weight: 600; font-size: 12px; color: var(--theme-text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${repo.repo_path}">📦 ${repoName}</span>
+                <span style="font-size: 10px; color: var(--theme-text-dim); max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${repo.repo_path}">${repo.repo_path}</span>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                ${versionsHtml}
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        // Bind clicks to Load and Delete buttons
+        recentRunsList.querySelectorAll('.dashboard-load-run-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const repo = btn.dataset.repo;
+            const branch = btn.dataset.branch;
+            const version = btn.dataset.version;
+            loadRun(repo, branch, version);
+          });
+        });
+
+        recentRunsList.querySelectorAll('.dashboard-delete-run-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const repo = btn.dataset.repo;
+            const version = btn.dataset.version;
+            deleteRun(repo, version);
+          });
+        });
+      }
+    }
+
+    // 2. Render Sidebar recently analyzed repositories
+    if (sidebarAnalyzedList) {
+      if (history.length === 0) {
+        sidebarAnalyzedList.innerHTML = `
+          <div style="font-size: 10px; color: var(--theme-text-dim); text-align: center; padding: 4px;">No analyzed repos</div>
+        `;
+      } else {
+        sidebarAnalyzedList.innerHTML = history.map(repo => {
+          const repoName = repo.repo_path.split('/').pop() || repo.repo_path;
+          return `
+            <div class="sidebar-analyzed-repo-item" data-repo="${repo.repo_path}" style="font-size: 11px; padding: var(--space-xs) var(--space-sm); border-radius: var(--radius-sm); border: 1px solid var(--theme-border); background: var(--theme-surface); cursor: pointer; display: flex; align-items: center; justify-content: space-between; transition: all 150ms ease; margin-bottom: 2px;">
+              <span style="font-weight: 500; color: var(--theme-text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;">📦 ${repoName}</span>
+              <span style="font-size: 10px; color: var(--theme-text-dim); flex-shrink: 0; padding-left: var(--space-xs);">(${repo.versions.length} runs)</span>
+            </div>
+          `;
+        }).join('');
+
+        // Bind clicks to sidebar items
+        sidebarAnalyzedList.querySelectorAll('.sidebar-analyzed-repo-item').forEach(item => {
+          item.addEventListener('click', () => {
+            const repo = item.dataset.repo;
+            console.log(`Sidebar Analyzed Repo clicked: ${repo}`);
+            selectAnalyzedRepoFromSidebar(repo);
+          });
+        });
+      }
+    }
+  }
+
+  async function loadRun(repoPath, branch, version) {
+    console.log(`loadRun: Loading repo: ${repoPath}, branch: ${branch}, version: ${version}`);
+
+    currentRepoTree = null;
+    currentRepoSource = repoPath;
+    currentRepoGitUrl = repoPath.startsWith('http') || repoPath.startsWith('git@') ? repoPath : '';
+    originalRepoSource = repoPath;
+    service.demoMode = false;
+    service.currentCommitSHA = version;
+    hasLoadedRepo = true;
+
+    // Sync input fields
+    const sidebarRepoInput = document.getElementById('remoteRepoUrlInput');
+    const sidebarBranchInput = document.getElementById('remoteRepoBranchInput');
+    if (sidebarRepoInput) sidebarRepoInput.value = currentRepoGitUrl || repoPath;
+    if (sidebarBranchInput) sidebarBranchInput.value = branch || '';
+
+    updateRepoSourceInfo();
+
+    // Save session in local storage
+    const session = { repo_path: repoPath, branch: branch || 'main', version };
+    localStorage.setItem("code_intel_session", JSON.stringify(session));
+
+    // Reload branch selector & commit history dropdown
+    await loadBranchesAndCommits(branch);
+
+    const selector = document.getElementById('branchSelector');
+    if (selector) selector.value = branch || 'main';
+
+    loadGraph();
+    loadVersionedFileTree(version);
+  }
+
+  function deleteRun(repoPath, version) {
+    let history = [];
+    try {
+      history = JSON.parse(localStorage.getItem("code_intel_history") || "[]");
+      if (!Array.isArray(history)) history = [];
+    } catch {
+      history = [];
+    }
+
+    let existingRepo = history.find(r => r.repo_path === repoPath);
+    if (existingRepo) {
+      existingRepo.versions = existingRepo.versions.filter(v => v.version !== version);
+      if (existingRepo.versions.length === 0) {
+        history = history.filter(r => r.repo_path !== repoPath);
+      }
+    }
+
+    localStorage.setItem("code_intel_history", JSON.stringify(history));
+
+    // Check if the deleted run was the active session
+    let savedSession = null;
+    try {
+      savedSession = JSON.parse(localStorage.getItem("code_intel_session"));
+    } catch {}
+
+    if (savedSession && savedSession.repo_path === repoPath && savedSession.version === version) {
+      // Clear active session and go back to Zero-Noise dashboard
+      localStorage.removeItem("code_intel_session");
+      hasLoadedRepo = false;
+      currentRepoSource = 'Demo project';
+      service.currentCommitSHA = null;
+      loadGraph();
+    }
+
+    renderDashboardAndSidebar();
+  }
+
+  function selectAnalyzedRepoFromSidebar(repoPath) {
+    let history = [];
+    try {
+      history = JSON.parse(localStorage.getItem("code_intel_history") || "[]");
+    } catch {}
+
+    const repoItem = history.find(r => r.repo_path === repoPath);
+    if (repoItem && repoItem.versions.length > 0) {
+      const latestRun = repoItem.versions[0];
+      loadRun(repoPath, latestRun.branch, latestRun.version);
+    }
+  }
+
+  async function restoreSessionState() {
+    const savedSession = localStorage.getItem("code_intel_session");
+    if (!savedSession) {
+      console.log('restoreSessionState: No saved session found.');
+      renderDashboardAndSidebar();
+      return;
+    }
+
+    try {
+      const session = JSON.parse(savedSession);
+      if (session && session.repo_path && session.version) {
+        console.log(`restoreSessionState: Found saved session. Quietly verifying version ${session.version}...`);
+
+        // Quietly check if the version exists on backend by querying repo/tree
+        const resp = await fetch(`${service.baseUrl}/repo/tree?version=${encodeURIComponent(session.version)}`);
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data && Object.keys(data).length > 0) {
+            console.log(`restoreSessionState: Version ${session.version} is verified on backend. Restoring...`);
+
+            // Set session details to active session
+            hasLoadedRepo = true;
+            currentRepoSource = session.repo_path;
+            currentRepoGitUrl = session.repo_path.startsWith('http') || session.repo_path.startsWith('git@') ? session.repo_path : '';
+            originalRepoSource = session.repo_path;
+            service.demoMode = false;
+            service.currentCommitSHA = session.version;
+
+            // Pre-populate input fields
+            const sidebarRepoInput = document.getElementById('remoteRepoUrlInput');
+            const sidebarBranchInput = document.getElementById('remoteRepoBranchInput');
+            if (sidebarRepoInput) sidebarRepoInput.value = currentRepoGitUrl || session.repo_path;
+            if (sidebarBranchInput) sidebarBranchInput.value = session.branch || '';
+
+            updateRepoSourceInfo();
+            renderDashboardAndSidebar();
+
+            // Load timeline and set select value
+            await loadBranchesAndCommits(session.branch);
+            const selector = document.getElementById('branchSelector');
+            if (selector) selector.value = session.branch || 'main';
+
+            // Load tree & graph
+            loadGraph();
+            loadVersionedFileTree(session.version);
+            return;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Failed quietly to restore session state:', err);
+    }
+
+    // Fallback: If verification failed, clear activeSession (but keep history!)
+    console.log('restoreSessionState: Session verification failed or is not parsed. Keeping landing state.');
+    hasLoadedRepo = false;
+    renderDashboardAndSidebar();
+  }
+
+  function clearHistoryAndLocalState() {
+    const confirmClear = confirm("Are you sure you want to clear your local session state and entire run history? This cannot be undone.");
+    if (!confirmClear) return;
+
+    localStorage.removeItem("code_intel_session");
+    localStorage.removeItem("code_intel_history");
+
+    hasLoadedRepo = false;
+    currentRepoSource = 'Demo project';
+    currentRepoGitUrl = '';
+    originalRepoSource = '';
+    service.currentCommitSHA = null;
+    service.demoMode = false;
+
+    // Reset inputs
+    const sidebarRepoInput = document.getElementById('remoteRepoUrlInput');
+    const sidebarBranchInput = document.getElementById('remoteRepoBranchInput');
+    const dashRepoInput = document.getElementById('dashboardRepoInput');
+    const dashBranchInput = document.getElementById('dashboardBranchInput');
+    if (sidebarRepoInput) sidebarRepoInput.value = '';
+    if (sidebarBranchInput) sidebarBranchInput.value = '';
+    if (dashRepoInput) dashRepoInput.value = '';
+    if (dashBranchInput) dashBranchInput.value = '';
+
+    // Clear file tree and timeline
+    const container = document.getElementById('fileTree');
+    if (container) container.innerHTML = '';
+    const timeline = document.getElementById('commitTimelineRail');
+    if (timeline) timeline.innerHTML = '<div style="padding: var(--space-sm); text-align: center; color: var(--theme-text-dim); font-size: 11px;">No commits loaded</div>';
+
+    updateRepoSourceInfo();
+    loadGraph();
+    renderDashboardAndSidebar();
+
+    alert("History and local state cleared successfully.");
   }
 
   function triggerOfflineMode(isOffline) {
@@ -661,158 +1182,13 @@ console.log('main.js loaded');
   function selectDemoProject() {
     currentRepoTree = null;
     currentRepoSource = 'Demo project';
+    currentRepoGitUrl = '';
+    originalRepoSource = '';
     service.demoMode = true;
-    service.currentCommitSHA = 'c333333333333333333333333333333333333333';
     service.graphData = null;
+    hasLoadedRepo = true;
     updateRepoSourceInfo();
-    loadBranchesAndCommits();
     loadGraph();
-  }
-
-  // === Rule Evolution Database & Logic ===
-  const mockRuleDnaDb = {
-    'n2': [
-      { sha: 'c333333333333333333333333333333333333333', date: '2026-07-27', ruleText: 'RateLimit: 5 requests/min', desc: 'Added aggressive rate limiting rule to prevent brute-force login attempts.' },
-      { sha: 'c222222222222222222222222222222222222222', date: '2026-07-20', ruleText: 'RateLimit: 10 requests/min', desc: 'Configured transient token verification and basic endpoint rules.' },
-      { sha: 'c111111111111111111111111111111111111111', date: '2026-07-10', ruleText: 'RateLimit: Disabled', desc: 'Initial implementation of basic authentication lookup rules.' }
-    ],
-    'n14': [
-      { sha: 'c333333333333333333333333333333333333333', date: '2026-07-27', ruleText: 'TokenTTL: 15 minutes', desc: 'Shortened token lifespan to match strict enterprise compliance standards.' },
-      { sha: 'c222222222222222222222222222222222222222', date: '2026-07-20', ruleText: 'TokenTTL: 60 minutes', desc: 'Initial signature validation rules for JWT generation.' }
-    ]
-  };
-
-  function getRuleEvolutionHistory(nodeId, nodeLabel) {
-    if (mockRuleDnaDb[nodeId]) {
-      return mockRuleDnaDb[nodeId];
-    }
-    return [
-      {
-        sha: 'c333333333333333333333333333333333333333',
-        date: '2026-07-27',
-        ruleText: `Active Rules: ${nodeLabel} config standards v1.2`,
-        desc: `Verified and refactored business rules mapping within ${nodeLabel}.`
-      },
-      {
-        sha: 'c222222222222222222222222222222222222222',
-        date: '2026-07-20',
-        ruleText: `Active Rules: ${nodeLabel} legacy setup v1.0`,
-        desc: 'Initial migration of modular rules from legacy repository structure.'
-      }
-    ];
-  }
-
-  function computeSimpleDiff(prev, curr) {
-    const prevWords = prev.split(/(\s+)/).filter(Boolean);
-    const currWords = curr.split(/(\s+)/).filter(Boolean);
-
-    const result = [];
-    let p = 0;
-    let c = 0;
-
-    while (p < prevWords.length || c < currWords.length) {
-      if (p < prevWords.length && c < currWords.length && prevWords[p] === currWords[c]) {
-        result.push({ type: 'unchanged', value: prevWords[p] });
-        p++;
-        c++;
-      } else if (c < currWords.length && !prevWords.slice(p).includes(currWords[c])) {
-        result.push({ type: 'added', value: currWords[c] });
-        c++;
-      } else if (p < prevWords.length && !currWords.slice(c).includes(prevWords[p])) {
-        result.push({ type: 'removed', value: prevWords[p] });
-        p++;
-      } else {
-        if (p < prevWords.length) {
-          result.push({ type: 'removed', value: prevWords[p] });
-          p++;
-        }
-        if (c < currWords.length) {
-          result.push({ type: 'added', value: currWords[c] });
-          c++;
-        }
-      }
-    }
-    return result;
-  }
-
-  let activeDetailNodeId = null;
-
-  function renderRuleEvolution(nodeId, nodeLabel) {
-    activeDetailNodeId = nodeId;
-    const container = document.getElementById('ruleEvolutionTimeline');
-    if (!container) return;
-
-    const history = getRuleEvolutionHistory(nodeId, nodeLabel);
-
-    if (history.length === 0) {
-      container.innerHTML = `<div style="color:var(--theme-text-dim); text-align:center;">No history found for this node.</div>`;
-      return;
-    }
-
-    container.innerHTML = history.map((item, idx) => {
-      const isCurrent = (item.sha === service.currentCommitSHA) ||
-                        (item.sha === 'latest' && !service.currentCommitSHA);
-      const borderLeft = isCurrent ? '4px solid var(--theme-primary)' : '2px solid var(--theme-border)';
-      const background = isCurrent ? 'var(--theme-surface-elevated)' : 'transparent';
-      const opacity = isCurrent ? '1' : '0.65';
-      const highlightBadge = isCurrent ? `<div class="slider-badge" style="font-size:10px; font-weight:600; background:var(--theme-primary); color:#fff; display:inline-block; padding:2px 6px; border-radius:var(--radius-full); margin-top:4px;">📍 CURRENT SLIDER POSITION</div>` : '';
-
-      const nextOlderRule = history[idx + 1];
-      let ruleDiffHtml = '';
-
-      if (nextOlderRule) {
-        const tokens = computeSimpleDiff(nextOlderRule.ruleText, item.ruleText);
-        ruleDiffHtml = `<div style="font-size:13px; font-family:var(--font-mono); line-height:1.4;">` +
-          tokens.map(t => {
-            if (t.type === 'added') {
-              return `<span style="background:#1f6feb; color:#fff; padding:1px 3px; border-radius:3px; font-weight:bold;">${t.value}</span>`;
-            } else if (t.type === 'removed') {
-              return `<span style="text-decoration:line-through; color:#ff7b72; background:rgba(255,123,114,0.15); padding:1px 3px; border-radius:3px;">${t.value}</span>`;
-            }
-            return `<span>${t.value}</span>`;
-          }).join('') + `</div>`;
-      } else {
-        ruleDiffHtml = `<div style="font-size:13px; font-family:var(--font-mono); color:#3fb950; background:rgba(63,185,80,0.15); padding:2px 6px; border-radius:4px;">✨ ${item.ruleText} (Initial Setup)</div>`;
-      }
-
-      return `
-        <div class="rule-timeline-item" data-sha="${item.sha}" style="padding:var(--space-sm); border-radius:var(--radius-md); border-left:${borderLeft}; background:${background}; opacity:${opacity}; transition:all 200ms ease;">
-          <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--theme-text-dim); margin-bottom:2px;">
-            <span>📅 ${item.date}</span>
-            <span style="font-family:var(--font-mono);">${item.sha.substring(0, 7)}</span>
-          </div>
-          <div style="margin-bottom:4px;">${ruleDiffHtml}</div>
-          <div style="font-size:11px; color:var(--theme-text-secondary); margin-top:2px; line-height:1.3;">${item.desc}</div>
-          ${highlightBadge}
-        </div>
-      `;
-    }).join('');
-  }
-
-  function updateRuleEvolutionHighlights() {
-    const container = document.getElementById('ruleEvolutionTimeline');
-    if (!container) return;
-
-    container.querySelectorAll('.rule-timeline-item').forEach(el => {
-      const sha = el.dataset.sha;
-      const isCurrent = (sha === service.currentCommitSHA) ||
-                        (sha === 'latest' && !service.currentCommitSHA);
-
-      el.style.borderLeft = isCurrent ? '4px solid var(--theme-primary)' : '2px solid var(--theme-border)';
-      el.style.background = isCurrent ? 'var(--theme-surface-elevated)' : 'transparent';
-      el.style.opacity = isCurrent ? '1' : '0.65';
-
-      const existingBadge = el.querySelector('.slider-badge');
-      if (existingBadge) existingBadge.remove();
-
-      if (isCurrent) {
-        const badge = document.createElement('div');
-        badge.className = 'slider-badge';
-        badge.style.cssText = 'font-size:10px; font-weight:600; background:var(--theme-primary); color:#fff; display:inline-block; padding:2px 6px; border-radius:var(--radius-full); margin-top:4px;';
-        badge.textContent = '📍 CURRENT SLIDER POSITION';
-        el.appendChild(badge);
-      }
-    });
   }
 
   // === Details Panel Functions ===
@@ -830,9 +1206,9 @@ console.log('main.js loaded');
     document.getElementById('emptyState').style.display = 'none';
     document.getElementById('detailsContent').style.display = 'block';
 
-    renderRuleEvolution(nodeId, nodeInfo.label);
+    const graphEdges = (service.graphData && service.graphData.edges) ? service.graphData.edges : [];
 
-    const incoming = service.graphData.edges.filter(e => e.target === nodeId);
+    const incoming = graphEdges.filter(e => e.target === nodeId);
     const impactList = document.getElementById('impactList');
     if (incoming.length === 0) {
       impactList.innerHTML = `<div class="details-panel__impact-item"><span class="mono" style="color:var(--theme-text-dim);">No dependents</span></div>`;
@@ -846,7 +1222,7 @@ console.log('main.js loaded');
       }).join('');
     }
 
-    const outgoing = service.graphData.edges.filter(e => e.source === nodeId);
+    const outgoing = graphEdges.filter(e => e.source === nodeId);
     const callPaths = document.getElementById('callPaths');
     if (outgoing.length === 0) {
       callPaths.innerHTML = `<span class="mono" style="color:var(--theme-text-dim);">No outgoing calls</span>`;
@@ -860,13 +1236,62 @@ console.log('main.js loaded');
       }).join('');
     }
 
-    document.getElementById('actionOpen').onclick = () => { alert('Open in editor: ' + nodeInfo.label); };
-    document.getElementById('actionFind').onclick = () => { alert('Find references for: ' + nodeInfo.label); };
+    document.getElementById('actionOpen').onclick = async () => {
+      const filePath = nodeInfo.file || nodeInfo.id;
+      try {
+        const resp = await service.safeFetch(`${service.baseUrl}/api/open-editor`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ file_path: filePath })
+        });
+        if (resp.ok) {
+          console.log('Opened in editor successfully:', filePath);
+        } else {
+          alert('Failed to open file in editor.');
+        }
+      } catch (err) {
+        console.warn('Failed to call open-editor API:', err);
+        alert('Failed to open file in editor. Error: ' + err.message);
+      }
+    };
+
+    document.getElementById('actionFind').onclick = async () => {
+      try {
+        const version = service.currentCommitSHA || 'latest';
+        const resp = await service.safeFetch(`${service.baseUrl}/api/references?symbol_id=${encodeURIComponent(nodeInfo.id)}&version=${encodeURIComponent(version)}`);
+        const data = await resp.json();
+        const callerIds = data.references || [];
+
+        if (callerIds.length > 0 && cy) {
+          cy.elements().unselect();
+          let highlightedCount = 0;
+          callerIds.forEach(id => {
+            const el = cy.getElementById(id);
+            if (el && el.length) {
+              el.select();
+              highlightedCount++;
+            }
+          });
+          if (highlightedCount > 0) {
+            alert(`Found and highlighted ${highlightedCount} incoming reference(s) on the canvas.`);
+          } else {
+            alert(`Found ${callerIds.length} reference(s), but they are not loaded in the current view level.`);
+          }
+        } else {
+          alert("No incoming references found for this symbol.");
+        }
+      } catch (err) {
+        console.warn('Failed to find references:', err);
+        alert('Failed to find references. Error: ' + err.message);
+      }
+    };
+
     document.getElementById('actionCopy').onclick = () => {
-      navigator.clipboard?.writeText(nodeInfo.label).then(() => {
-        alert('Copied: ' + nodeInfo.label);
+      const cleanFqn = nodeInfo.id.replace(/^(file:|symbol:)/, '');
+      navigator.clipboard?.writeText(cleanFqn).then(() => {
+        alert('Copied fully-qualified name: ' + cleanFqn);
       }).catch(() => {
-        alert('Copy: ' + nodeInfo.label);
+        alert('Copied label: ' + nodeInfo.label);
       });
     };
     document.getElementById('actionGenerateReq').onclick = () => {
@@ -938,61 +1363,51 @@ console.log('main.js loaded');
     });
   }
 
-  function getColorForType(type) {
-    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-    const colors = {
-      light: {
-        'function': '#2da44e',
-        'class': '#0969da',
-        'module': '#8250df',
-        'file': '#6e7781',
-        'directory': '#6e7781',
-        'folder': '#6e7781',
-        'variable': '#cf222e',
-        'enum': '#953b00',
-        'edge-call': '#0969da',
-        'edge-import': '#d46003',
-        'symbol': '#6e7781'
-      },
-      dark: {
-        'function': '#3fb950',
-        'class': '#58a6ff',
-        'module': '#bc8cff',
-        'file': '#8b949e',
-        'directory': '#8b949e',
-        'folder': '#8b949e',
-        'variable': '#ff7b72',
-        'enum': '#f0883e',
-        'edge-call': '#58a6ff',
-        'edge-import': '#ff9e3b',
-        'symbol': '#8b949e'
-      }
-    };
-    const themeColors = isDark ? colors.dark : colors.light;
-    return themeColors[type] || themeColors['symbol'];
-  }
-
   // === Load File Graph ===
   async function loadFileGraph(commitSHA) {
+    if (!hasLoadedRepo) {
+      console.log('loadFileGraph: No repository has been loaded yet. Rendering Zero-Noise landing state.');
+      nodeMap = {};
+      const nodeCountEl = document.getElementById('nodeCount');
+      const edgeCountEl = document.getElementById('edgeCount');
+      if (nodeCountEl) nodeCountEl.textContent = '0 nodes';
+      if (edgeCountEl) edgeCountEl.textContent = '0 edges';
+      const splashEl = document.getElementById('graphSplash');
+      if (splashEl) splashEl.style.display = 'flex';
+
+      const cyInstance = cytoscape({
+        container: document.getElementById('cy'),
+        elements: { nodes: [], edges: [] }
+      });
+      cy = cyInstance;
+      window.cy = cyInstance;
+      return;
+    }
+
     const sha = commitSHA || service.currentCommitSHA || 'latest';
     console.log(`loadFileGraph: Fetching file-level graph for version ${sha}`);
 
     const statusEl = document.getElementById('serverStatus');
     const dotEl = document.getElementById('serverDot');
 
-    try {
-      const status = await service.connect();
-      if (service.connected) {
-        statusEl.textContent = 'Connected';
-        dotEl.style.background = 'var(--theme-success)';
-      } else {
-        statusEl.textContent = 'Offline (Check Server)';
-        dotEl.style.background = 'var(--theme-danger)';
+    if (!service.connected) {
+      try {
+        const status = await service.connect();
+        if (service.connected) {
+          if (statusEl) statusEl.textContent = 'Connected';
+          if (dotEl) dotEl.style.background = 'var(--theme-success)';
+        } else {
+          if (statusEl) statusEl.textContent = 'Offline (Check Server)';
+          if (dotEl) dotEl.style.background = 'var(--theme-danger)';
+        }
+      } catch (e) {
+        if (statusEl) statusEl.textContent = 'Offline (Check Server)';
+        if (dotEl) dotEl.style.background = 'var(--theme-danger)';
+        console.warn('Connection error:', e);
       }
-    } catch (e) {
-      statusEl.textContent = 'Offline (Check Server)';
-      dotEl.style.background = 'var(--theme-danger)';
-      console.warn('Connection error:', e);
+    } else {
+      if (statusEl) statusEl.textContent = 'Connected';
+      if (dotEl) dotEl.style.background = 'var(--theme-success)';
     }
 
     if (cy && !service.connected) {
@@ -1003,12 +1418,26 @@ console.log('main.js loaded');
     try {
       let url = `${service.baseUrl}/graph?version=${encodeURIComponent(sha)}&level=file`;
       const resp = await service.safeFetch(url);
-      const graph = await resp.json();
+      let graph = await resp.json();
 
-      // Ensure we only render FileNodes (representing directories and code files)
-      const fileNodes = graph.nodes.filter(n => n.type === 'file' || n.type === 'directory' || n.type === 'folder');
-      const fileNodeIds = new Set(fileNodes.map(n => n.id));
-      const fileEdges = graph.edges.filter(e => fileNodeIds.has(e.source) && fileNodeIds.has(e.target));
+      // Fallback retry: if specific version returns empty graph (e.g. bitemporal disabled or empty DB snapshot), retry with 'latest'
+      if ((!graph || !graph.nodes || graph.nodes.length === 0) && sha !== 'latest') {
+        console.log(`loadFileGraph: Graph for version ${sha} is empty. Retrying fallback to 'latest'...`);
+        try {
+          const fallbackUrl = `${service.baseUrl}/graph?version=latest&level=file`;
+          const fallbackResp = await service.safeFetch(fallbackUrl);
+          graph = await fallbackResp.json();
+        } catch (fallbackErr) {
+          console.warn('Failed to load fallback latest file graph:', fallbackErr);
+        }
+      }
+
+      // Store graph data in service.graphData so details panel can access incoming/outgoing edges
+      service.graphData = graph;
+
+      // Render file-level nodes (directories, modules, and code files) and their edges
+      const fileNodes = graph.nodes || [];
+      const fileEdges = graph.edges || [];
 
       nodeMap = {};
       fileNodes.forEach(n => { nodeMap[n.id] = n; });
@@ -1030,28 +1459,16 @@ console.log('main.js loaded');
         container: document.getElementById('cy'),
         elements: {
           nodes: fileNodes.map(n => ({
-            data: {
-              id: n.id,
-              label: n.label,
-              type: n.type,
-              name: n.label,
-              bgColor: getColorForType(n.type),
-              borderColor: getColorForType(n.type)
-            }
+            data: { id: n.id, label: n.label, type: n.type, name: n.label },
+            style: { 'background-color': `var(--node-${n.type})`, 'border-color': `var(--node-${n.type})` }
           })),
-          edges: fileEdges.map(e => ({
-            data: {
-              ...e,
-              id: e.source + '-' + e.target,
-              edgeColor: getColorForType(e.type === 'imports' ? 'edge-import' : 'edge-call')
-            }
-          }))
+          edges: fileEdges.map(e => ({ data: { ...e, id: e.source + '-' + e.target } }))
         },
         style: [
-          { selector: 'node', style: { 'width': '36px', 'height': '36px', 'background-color': 'data(bgColor)', 'border-width': 2, 'border-color': 'data(borderColor)', 'border-opacity': 0.8, 'label': 'data(label)', 'font-size': '11px', 'font-family': "'Inter', -apple-system, sans-serif", 'color': isDark ? '#F0F6FC' : '#1F2328', 'text-valign': 'bottom', 'text-halign': 'center', 'text-outline-width': 0, 'text-margin-y': 6, 'text-wrap': 'wrap', 'text-max-width': '60px' } },
-          { selector: 'node:selected', style: { 'border-width': 4, 'border-color': isDark ? '#58A6FF' : '#0969DA', 'border-opacity': 1, 'width': '42px', 'height': '42px', 'background-opacity': 1, 'color': isDark ? '#58A6FF' : '#0969DA', 'font-weight': 'bold', 'overlay-color': isDark ? '#58A6FF' : '#0969DA', 'overlay-padding': 6, 'overlay-opacity': 0.15 } },
-          { selector: 'edge', style: { 'width': 2, 'line-color': 'data(edgeColor)', 'target-arrow-color': 'data(edgeColor)', 'target-arrow-shape': 'triangle', 'source-arrow-shape': 'none', 'arrow-scale': 1.2, 'curve-style': 'bezier', 'label': 'data(type)', 'font-size': '9px', 'font-family': "'Inter', sans-serif", 'color': isDark ? '#8B949E' : '#656D76', 'text-outline-width': 0, 'text-margin-y': -6, 'control-point-distance': 20, 'control-point-weight': 0.5 } },
-          { selector: 'edge[type="imports"]', style: { 'line-style': 'dashed', 'line-color': 'data(edgeColor)', 'target-arrow-color': 'data(edgeColor)', 'width': 1.5 } }
+          { selector: 'node', style: { 'width': '36px', 'height': '36px', 'border-width': 2, 'border-color': 'data(border-color)', 'border-opacity': 0.8, 'label': 'data(label)', 'font-size': '11px', 'font-family': "'Inter', -apple-system, sans-serif", 'color': isDark ? '#F0F6FC' : '#1F2328', 'text-valign': 'bottom', 'text-halign': 'center', 'text-outline-width': 2, 'text-outline-color': isDark ? '#0D1117' : '#FFFFFF', 'text-outline-opacity': 1, 'text-margin-y': 6, 'text-wrap': 'wrap', 'text-max-width': '60px' } },
+          { selector: 'node:selected', style: { 'border-width': 4, 'border-color': 'var(--theme-primary)', 'border-opacity': 1, 'width': '44px', 'height': '44px', 'background-opacity': 0.9 } },
+          { selector: 'edge', style: { 'width': 2, 'line-color': 'var(--edge-call)', 'target-arrow-color': 'var(--edge-call)', 'target-arrow-shape': 'triangle', 'source-arrow-shape': 'none', 'arrow-scale': 1.2, 'curve-style': 'bezier', 'label': 'data(type)', 'font-size': '9px', 'font-family': "'Inter', sans-serif", 'color': isDark ? '#8B949E' : '#656D76', 'text-outline-width': 1, 'text-outline-color': isDark ? '#0D1117' : '#FFFFFF', 'text-margin-y': -6, 'control-point-distance': 20, 'control-point-weight': 0.5 } },
+          { selector: 'edge[type="imports"]', style: { 'line-style': 'dashed', 'line-color': 'var(--edge-import)', 'target-arrow-color': 'var(--edge-import)', 'width': 1.5 } }
         ],
         layout: {
           name: 'concentric',
@@ -1080,9 +1497,6 @@ console.log('main.js loaded');
       buildFileTree();
       showEmptyDetails();
       updateRepoSourceInfo();
-      if (typeof window.applyWorkspaceFilters === 'function') {
-        window.applyWorkspaceFilters();
-      }
       console.log('✅ File graph loaded with', fileNodes.length, 'nodes and', fileEdges.length, 'edges.');
     } catch (err) {
       console.warn('Failed to load file graph, falling back to empty graph:', err);
@@ -1098,10 +1512,7 @@ console.log('main.js loaded');
   function setupFilters() {
     const chips = document.querySelectorAll('.filter-chip');
     const legendRows = document.querySelectorAll('.legend__row.legend-filter');
-    const riskSlider = document.getElementById('riskFilterSlider');
-    const riskValueLabel = document.getElementById('riskFilterValue');
     let activeType = 'all';
-    let riskThreshold = 0;
 
     const setActiveType = (type) => {
       activeType = type;
@@ -1113,47 +1524,30 @@ console.log('main.js loaded');
     const applyFilter = () => {
       if (!cy) return;
       const nodes = cy.nodes();
-
-      // First calculate node visibility based on type filtering and risk/in-degree threshold
-      nodes.forEach(node => {
-        const type = node.data('type');
-        const inDegree = node.indegree(false); // indegree in current full graph, ignoring direction if false is not passed but false computes only incoming
-
-        const matchesType = (activeType === 'all' || type === activeType);
-        const matchesRisk = (inDegree >= riskThreshold);
-
-        if (matchesType && matchesRisk) {
-          node.style('opacity', 1);
-          node.style('display', 'element');
-        } else if (matchesType && !matchesRisk) {
-          // Fade out nodes that do not meet the risk threshold but match type
-          node.style('opacity', 0.08);
-          node.style('display', 'element');
-        } else {
-          // Hide nodes that do not match type filter
-          node.style('opacity', 0.1);
-          node.style('display', 'element');
-        }
-      });
-
-      // Synchronize edge visibility: only highlight active connections
-      cy.edges().forEach(edge => {
-        const src = edge.data('source');
-        const tgt = edge.data('target');
-        const srcNode = cy.getElementById(src);
-        const tgtNode = cy.getElementById(tgt);
-
-        const srcVisible = srcNode.style('opacity') > 0.1;
-        const tgtVisible = tgtNode.style('opacity') > 0.1;
-
-        if (srcVisible && tgtVisible) {
-          edge.style('opacity', 1);
-          edge.style('display', 'element');
-        } else {
-          edge.style('opacity', 0.05);
-          edge.style('display', 'element');
-        }
-      });
+      if (activeType === 'all') {
+        nodes.style('opacity', 1);
+        nodes.style('display', 'element');
+        cy.edges().style('opacity', 1);
+        cy.edges().style('display', 'element');
+      } else {
+        nodes.forEach(node => {
+          const type = node.data('type');
+          if (type === activeType) {
+            node.style('opacity', 1);
+            node.style('display', 'element');
+          } else {
+            node.style('opacity', 0.1);
+            node.style('display', 'element');
+          }
+        });
+        cy.edges().style('opacity', (edge) => {
+          const src = edge.data('source');
+          const tgt = edge.data('target');
+          const srcVisible = cy.getElementById(src).style('opacity') !== 0.1;
+          const tgtVisible = cy.getElementById(tgt).style('opacity') !== 0.1;
+          return (srcVisible && tgtVisible) ? 1 : 0.1;
+        });
+      }
     };
 
     chips.forEach(chip => {
@@ -1167,19 +1561,6 @@ console.log('main.js loaded');
         setActiveType(row.dataset.type);
       });
     });
-
-    if (riskSlider) {
-      riskSlider.addEventListener('input', (e) => {
-        riskThreshold = parseInt(e.target.value, 10);
-        if (riskValueLabel) {
-          riskValueLabel.textContent = riskThreshold;
-        }
-        applyFilter();
-      });
-    }
-
-    // Expose applyFilter to global scope to allow re-applying when graph renders/loads
-    window.applyWorkspaceFilters = applyFilter;
   }
 
   // === Graph Controls ===
@@ -1217,18 +1598,10 @@ console.log('main.js loaded');
       return html;
     };
 
-    if (currentRepoTree) {
+    if (currentRepoTree && Object.keys(currentRepoTree).length > 0) {
       container.innerHTML = renderTree(currentRepoTree, 0);
-    } else {
-      let folderMap = { 'auth': ['n1'], 'user': ['n5', 'n18'], 'db': ['n7'] };
-      const sha = service.currentCommitSHA;
-
-      if (!sha || sha === 'c333333333333333333333333333333333333333') {
-        folderMap = { 'auth': ['n1', 'n13'], 'user': ['n5', 'n18'], 'utils': ['n9', 'n11'], 'db': ['n7'], 'email': ['n16'], 'root': ['n20'] };
-      } else if (sha === 'c222222222222222222222222222222222222222') {
-        folderMap = { 'auth': ['n1', 'n13'], 'user': ['n5', 'n18'], 'utils': ['n9', 'n11'], 'db': ['n7'] };
-      }
-
+    } else if (service.demoMode) {
+      const folderMap = { 'auth': ['n1', 'n13'], 'user': ['n5', 'n18'], 'utils': ['n9', 'n11'], 'db': ['n7'], 'email': ['n16'], 'root': ['n20'] };
       let html = '';
       html += `<div class="file-tree__item file-tree__item--folder" style="padding-left:8px;"><span class="file-tree__toggle file-tree__toggle--expanded" data-folder-name="src">▶</span><span class="file-tree__icon">📂</span><span>src</span></div>`;
       html += `<div class="file-tree__children" data-folder-children="src">`;
@@ -1254,6 +1627,8 @@ console.log('main.js loaded');
       }
       html += `</div>`;
       container.innerHTML = html;
+    } else {
+      container.innerHTML = `<div style="padding: var(--space-sm); text-align: center; color: var(--theme-text-dim); font-size: 11px;">No files found in repository tree</div>`;
     }
 
     container.querySelectorAll('.file-tree__toggle').forEach(toggle => {
@@ -1386,11 +1761,15 @@ console.log('main.js loaded');
     generateBtn.innerHTML = '<span class="spinner"></span> Generating...';
     status.textContent = 'Generating requirements using ' + model + '...';
 
+    // Reset local cache
+    requirementsRawMarkdown = '';
+    requirementsJsonTasks = null;
+
     try {
       const commitSHA = service.currentCommitSHA || 'latest';
       
       // POST request to stream requirements chunk by chunk
-      const response = await fetch(`${service.baseUrl}/requirements/stream?version=${encodeURIComponent(commitSHA)}`, {
+      const response = await service.safeFetch(`${service.baseUrl}/requirements/stream?version=${encodeURIComponent(commitSHA)}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -1427,9 +1806,11 @@ console.log('main.js loaded');
               const parsed = JSON.parse(dataStr);
 
               if (parsed.token) {
-                // Render incoming markdown chunks inside #reqOutput in real-time
-                output.textContent += parsed.token;
-                output.scrollTop = output.scrollHeight;
+                requirementsRawMarkdown += parsed.token;
+                if (requirementsViewMode === 'markdown') {
+                  output.textContent = requirementsRawMarkdown;
+                  output.scrollTop = output.scrollHeight;
+                }
               }
 
               if (parsed.done === true) {
@@ -1440,6 +1821,13 @@ console.log('main.js loaded');
                 status.textContent = `✅ Complete! Verification status: ${isVerified} (Confidence Score: ${confidence})`;
 
                 const reqJson = parsed.req_json || {};
+                requirementsJsonTasks = reqJson; // Store the complete json result!
+
+                if (requirementsViewMode === 'json') {
+                  output.textContent = JSON.stringify(reqJson, null, 2);
+                  output.scrollTop = 0;
+                }
+
                 const tasks = reqJson.tasks || [];
                 let rows = '';
 
@@ -1474,7 +1862,7 @@ console.log('main.js loaded');
                   });
                 });
 
-                window._generatedReqDoc = output.textContent;
+                window._generatedReqDoc = requirementsRawMarkdown;
               }
             } catch (err) {
               console.warn("Failed to parse SSE JSON chunk:", err);
@@ -1500,6 +1888,8 @@ console.log('main.js loaded');
     const testBtn = document.getElementById('settingsTestBtn');
     const testStatus = document.getElementById('settingsTestStatus');
 
+    const testLlmStatus = document.getElementById('settingsLlmTestStatus');
+
     openBtn.addEventListener('click', () => {
       document.getElementById('settingsServerUrl').value = service.baseUrl;
       document.getElementById('settingsMcpUrl').value = service.mcpUrl;
@@ -1514,15 +1904,130 @@ console.log('main.js loaded');
       document.getElementById('settingsKeyStatus').textContent = storedKey ? 'Key saved' : 'Key not saved';
       document.getElementById('settingsCustomModelField').classList.toggle('modal__field--hidden', storedModel !== 'custom');
 
+      const storedTimeout = localStorage.getItem('code-intel-ingestion-timeout') || '300';
+      document.getElementById('settingsTimeout').value = storedTimeout;
+
       // Reset test connection status
       if (testStatus) {
         testStatus.textContent = 'Ready to test. Click "Test Connection" to run diagnostics.';
         testStatus.style.borderColor = 'var(--theme-border)';
         testStatus.style.color = 'var(--theme-text-secondary)';
       }
+      if (testLlmStatus) {
+        testLlmStatus.textContent = 'Ready to test. Click "Test LLM Connection" to sync credentials & run pre-flight tests.';
+        testLlmStatus.style.borderColor = 'var(--theme-border)';
+        testLlmStatus.style.color = 'var(--theme-text-secondary)';
+      }
 
       modal.classList.add('open');
     });
+
+    const testLlmBtn = document.getElementById('settingsTestLlmBtn');
+    if (testLlmBtn) {
+      testLlmBtn.addEventListener('click', async () => {
+        const provider = document.getElementById('settingsProvider').value;
+        const model = document.getElementById('settingsLLM').value;
+        const customModel = document.getElementById('settingsCustomModel').value.trim();
+        let key = document.getElementById('settingsApiKey').value.trim();
+
+        const finalModel = model === 'custom' ? customModel : model;
+        let finalKey = key;
+        if (key === '••••••••') {
+          finalKey = localStorage.getItem('code-intel-llm-key-' + provider) || '';
+        }
+
+        if (!finalKey) {
+          testLlmStatus.textContent = '❌ Error: API key cannot be empty.';
+          testLlmStatus.style.borderColor = 'var(--theme-danger)';
+          testLlmStatus.style.color = 'var(--theme-danger)';
+          return;
+        }
+
+        testLlmStatus.innerHTML = '⚡ <strong>Synchronizing LLM credentials with backend...</strong>';
+        testLlmStatus.style.borderColor = 'var(--theme-primary)';
+        testLlmStatus.style.color = 'var(--theme-text-primary)';
+
+        try {
+          const testServerUrl = document.getElementById('settingsServerUrl').value.trim() || service.baseUrl;
+          let resp;
+          let success = false;
+          let errorMessage = '';
+
+          // 1. Try new robust test endpoint /api/llm/test
+          try {
+            resp = await service.safeFetch(`${testServerUrl}/api/llm/test`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ provider, model: finalModel, api_key: finalKey })
+            });
+            if (resp.ok) {
+              success = true;
+            } else if (resp.status !== 404) {
+              errorMessage = `HTTP Error ${resp.status} on /api/llm/test`;
+            }
+          } catch (err) {
+            errorMessage = err.message;
+          }
+
+          // 2. Try fallback /config/llm/test if first failed or returned 404
+          if (!success && (!resp || resp.status === 404)) {
+            console.log('Test LLM: Trying fallback /config/llm/test...');
+            try {
+              resp = await service.safeFetch(`${testServerUrl}/config/llm/test`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ provider, model: finalModel, api_key: finalKey })
+              });
+              if (resp.ok) {
+                success = true;
+              } else if (resp.status !== 404) {
+                errorMessage = `HTTP Error ${resp.status} on /config/llm/test`;
+              }
+            } catch (err) {
+              errorMessage = err.message;
+            }
+          }
+
+          // 3. Try standard sync fallback /config/llm if both test endpoints returned 404
+          if (!success && (!resp || resp.status === 404)) {
+            console.log('Test LLM: Falling back to sync /config/llm...');
+            try {
+              resp = await service.safeFetch(`${testServerUrl}/config/llm`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'X-Transient-Memory-Only': 'true',
+                  'Cache-Control': 'no-store',
+                  'Pragma': 'no-cache'
+                },
+                body: JSON.stringify({ provider, model: finalModel, api_key: finalKey, session_id: "default" })
+              });
+              if (resp.ok) {
+                success = true;
+              } else {
+                errorMessage = `HTTP Error ${resp.status} on /config/llm`;
+              }
+            } catch (err) {
+              errorMessage = err.message;
+            }
+          }
+
+          if (success) {
+            testLlmStatus.innerHTML = `✅ LLM Connection verified successfully!\n   Provider: ${provider}\n   Model: ${finalModel}\n   Key Status: Present (${finalKey.substring(0, 4)}...${finalKey.substring(finalKey.length - 4)})`;
+            testLlmStatus.style.borderColor = 'var(--theme-success)';
+            testLlmStatus.style.color = 'var(--theme-success)';
+          } else {
+            testLlmStatus.textContent = `❌ LLM connection test failed: ${errorMessage}`;
+            testLlmStatus.style.borderColor = 'var(--theme-danger)';
+            testLlmStatus.style.color = 'var(--theme-danger)';
+          }
+        } catch (err) {
+          testLlmStatus.textContent = `❌ Failed to synchronize with backend: ${err.message || err}`;
+          testLlmStatus.style.borderColor = 'var(--theme-danger)';
+          testLlmStatus.style.color = 'var(--theme-danger)';
+        }
+      });
+    }
 
     if (testBtn) {
       testBtn.addEventListener('click', async () => {
@@ -1566,8 +2071,43 @@ console.log('main.js loaded');
           diagnostics.push(`📡 Pinging API Server at: ${testServerUrl}/api/status ...`);
           testStatus.innerText = diagnostics.join('\n');
 
-          const resp = await fetch(`${testServerUrl}/api/status`, { signal: getTimeoutSignal(4000) });
-          if (resp.ok) {
+          let resp;
+          let useFallbackEndpoint = false;
+          try {
+            resp = await fetch(`${testServerUrl}/api/status`, { signal: getTimeoutSignal(4000) });
+            if (!resp.ok && resp.status === 404) {
+              useFallbackEndpoint = true;
+            }
+          } catch (err) {
+            useFallbackEndpoint = true;
+          }
+
+          if (useFallbackEndpoint) {
+            diagnostics.push(`📡 /api/status not found or unreachable. Retrying with fallback /status ...`);
+            testStatus.innerText = diagnostics.join('\n');
+            try {
+              resp = await fetch(`${testServerUrl}/status`, { signal: getTimeoutSignal(4000) });
+            } catch (err) {
+              // Fallback retry replacing localhost with 127.0.0.1
+              if (testServerUrl.includes('localhost')) {
+                const fallbackUrl = testServerUrl.replace('localhost', '127.0.0.1');
+                diagnostics.push(`⚠️ localhost connection failed. Retrying with IPv4 loopback: ${fallbackUrl}/api/status ...`);
+                testStatus.innerText = diagnostics.join('\n');
+                try {
+                  resp = await fetch(`${fallbackUrl}/api/status`, { signal: getTimeoutSignal(4000) });
+                } catch (err2) {
+                  diagnostics.push(`📡 IPv4 loopback fallback to /status ...`);
+                  testStatus.innerText = diagnostics.join('\n');
+                  resp = await fetch(`${fallbackUrl}/status`, { signal: getTimeoutSignal(4000) });
+                }
+                diagnostics.push(`💡 Tip: localhost is unreachable. Consider updating Server URL to use 127.0.0.1 in Settings if localhost resolves to an inactive IPv6 loopback.`);
+              } else {
+                throw err;
+              }
+            }
+          }
+
+          if (resp && resp.ok) {
             const data = await resp.json();
             diagnostics.push(`✅ API Server is Online!\n   Version: ${data.version || 'unknown'}\n   Status: ${data.status || 'ready'}\n   Docker Mode: ${!!(data.is_docker || data.docker || data.dockerMode || data.docker_mode || data.environment === 'docker')}`);
           } else {
@@ -1616,6 +2156,21 @@ console.log('main.js loaded');
       });
     }
 
+    const sideClearBtn = document.getElementById('sidebarClearHistoryBtn');
+    if (sideClearBtn) {
+      sideClearBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        clearHistoryAndLocalState();
+      });
+    }
+
+    const dashClearBtn = document.getElementById('dashboardClearHistoryBtn');
+    if (dashClearBtn) {
+      dashClearBtn.addEventListener('click', () => {
+        clearHistoryAndLocalState();
+      });
+    }
+
     closeBtn.addEventListener('click', () => modal.classList.remove('open'));
     cancelBtn.addEventListener('click', () => modal.classList.remove('open'));
     modal.addEventListener('click', (e) => {
@@ -1653,6 +2208,8 @@ console.log('main.js loaded');
       if (key && key !== '••••••••') {
         localStorage.setItem('code-intel-llm-key-' + provider, key);
       }
+      const timeoutVal = document.getElementById('settingsTimeout').value.trim();
+      localStorage.setItem('code-intel-ingestion-timeout', timeoutVal || '300');
 
       // Synchronize dynamically with backend /config/llm
       try {
@@ -1707,6 +2264,8 @@ console.log('main.js loaded');
     });
   }
 
+  let selectingTransitive = false;
+
   // === Setup Cytoscape Events ===
   function setupCyEvents() {
     if (!cy) return;
@@ -1717,18 +2276,16 @@ console.log('main.js loaded');
         selectedNodeIds.push(node.id());
       }
 
-      // Automatically select direct neighbors
-      if (!window._selectingNeighbors) {
-        window._selectingNeighbors = true;
+      // Auto select connecting nodes up to all levels (transitive closure)
+      if (!selectingTransitive) {
+        selectingTransitive = true;
         try {
-          node.neighborhood('node').forEach(neighbor => {
-            neighbor.select();
-            if (!selectedNodeIds.includes(neighbor.id())) {
-              selectedNodeIds.push(neighbor.id());
-            }
-          });
+          const predecessors = node.predecessors();
+          const successors = node.successors();
+          predecessors.select();
+          successors.select();
         } finally {
-          window._selectingNeighbors = false;
+          selectingTransitive = false;
         }
       }
 
@@ -1751,36 +2308,12 @@ console.log('main.js loaded');
       if (idx > -1) {
         selectedNodeIds.splice(idx, 1);
       }
-
-      // Automatically deselect direct neighbors
-      if (!window._selectingNeighbors) {
-        window._selectingNeighbors = true;
-        try {
-          node.neighborhood('node').forEach(neighbor => {
-            neighbor.unselect();
-            const nIdx = selectedNodeIds.indexOf(neighbor.id());
-            if (nIdx > -1) {
-              selectedNodeIds.splice(nIdx, 1);
-            }
-          });
-        } finally {
-          window._selectingNeighbors = false;
-        }
-      }
-
       updateWorkspaceScope();
       if (selectedNodeIds.length === 0) {
         showEmptyDetails();
       } else if (selectedNodeIds.length === 1) {
         const el = cy.getElementById(selectedNodeIds[0]);
         if (el && el.length) showNodeDetails(el);
-      } else {
-        document.getElementById('detailName').textContent = selectedNodeIds.length + ' nodes selected';
-        document.getElementById('detailType').textContent = 'Multi-select mode';
-        document.getElementById('emptyState').style.display = 'none';
-        document.getElementById('detailsContent').style.display = 'block';
-        document.getElementById('impactList').innerHTML = `<div class="details-panel__impact-item"><span class="mono">${selectedNodeIds.length} nodes in scope</span></div>`;
-        document.getElementById('callPaths').innerHTML = `<span class="mono">Use the Requirements Workspace to generate documentation for this selection.</span>`;
       }
     });
 
@@ -1905,19 +2438,24 @@ console.log('main.js loaded');
     const statusEl = document.getElementById('serverStatus');
     const dotEl = document.getElementById('serverDot');
 
-    try {
-      const status = await service.connect();
-      if (service.connected) {
-        statusEl.textContent = 'Connected';
-        dotEl.style.background = 'var(--theme-success)';
-      } else {
-        statusEl.textContent = 'Offline (Check Server)';
-        dotEl.style.background = 'var(--theme-danger)';
+    if (!service.connected) {
+      try {
+        const status = await service.connect();
+        if (service.connected) {
+          if (statusEl) statusEl.textContent = 'Connected';
+          if (dotEl) dotEl.style.background = 'var(--theme-success)';
+        } else {
+          if (statusEl) statusEl.textContent = 'Offline (Check Server)';
+          if (dotEl) dotEl.style.background = 'var(--theme-danger)';
+        }
+      } catch (e) {
+        if (statusEl) statusEl.textContent = 'Offline (Check Server)';
+        if (dotEl) dotEl.style.background = 'var(--theme-danger)';
+        console.warn('Connection error:', e);
       }
-    } catch (e) {
-      statusEl.textContent = 'Offline (Check Server)';
-      dotEl.style.background = 'var(--theme-danger)';
-      console.warn('Connection error:', e);
+    } else {
+      if (statusEl) statusEl.textContent = 'Connected';
+      if (dotEl) dotEl.style.background = 'var(--theme-success)';
     }
 
     // Do not clear the active Cytoscape canvas elements. Allow the developer to continue in offline mode.
@@ -1947,28 +2485,16 @@ console.log('main.js loaded');
       container: document.getElementById('cy'),
       elements: {
         nodes: graph.nodes.map(n => ({
-          data: {
-            id: n.id,
-            label: n.label,
-            type: n.type,
-            name: n.label,
-            bgColor: getColorForType(n.type),
-            borderColor: getColorForType(n.type)
-          }
+          data: { id: n.id, label: n.label, type: n.type, name: n.label },
+          style: { 'background-color': `var(--node-${n.type})`, 'border-color': `var(--node-${n.type})` }
         })),
-        edges: graph.edges.map(e => ({
-          data: {
-            ...e,
-            id: e.source + '-' + e.target,
-            edgeColor: getColorForType(e.type === 'imports' ? 'edge-import' : 'edge-call')
-          }
-        }))
+        edges: graph.edges.map(e => ({ data: { ...e, id: e.source + '-' + e.target } }))
       },
       style: [
-        { selector: 'node', style: { 'width': '36px', 'height': '36px', 'background-color': 'data(bgColor)', 'border-width': 2, 'border-color': 'data(borderColor)', 'border-opacity': 0.8, 'label': 'data(label)', 'font-size': '11px', 'font-family': "'Inter', -apple-system, sans-serif", 'color': isDark ? '#F0F6FC' : '#1F2328', 'text-valign': 'bottom', 'text-halign': 'center', 'text-outline-width': 0, 'text-margin-y': 6, 'text-wrap': 'wrap', 'text-max-width': '60px' } },
-        { selector: 'node:selected', style: { 'border-width': 4, 'border-color': isDark ? '#58A6FF' : '#0969DA', 'border-opacity': 1, 'width': '42px', 'height': '42px', 'background-opacity': 1, 'color': isDark ? '#58A6FF' : '#0969DA', 'font-weight': 'bold', 'overlay-color': isDark ? '#58A6FF' : '#0969DA', 'overlay-padding': 6, 'overlay-opacity': 0.15 } },
-        { selector: 'edge', style: { 'width': 2, 'line-color': 'data(edgeColor)', 'target-arrow-color': 'data(edgeColor)', 'target-arrow-shape': 'triangle', 'source-arrow-shape': 'none', 'arrow-scale': 1.2, 'curve-style': 'bezier', 'label': 'data(type)', 'font-size': '9px', 'font-family': "'Inter', sans-serif", 'color': isDark ? '#8B949E' : '#656D76', 'text-outline-width': 0, 'text-margin-y': -6, 'control-point-distance': 20, 'control-point-weight': 0.5 } },
-        { selector: 'edge[type="imports"]', style: { 'line-style': 'dashed', 'line-color': 'data(edgeColor)', 'target-arrow-color': 'data(edgeColor)', 'width': 1.5 } }
+        { selector: 'node', style: { 'width': '36px', 'height': '36px', 'border-width': 2, 'border-color': 'data(border-color)', 'border-opacity': 0.8, 'label': 'data(label)', 'font-size': '11px', 'font-family': "'Inter', -apple-system, sans-serif", 'color': isDark ? '#F0F6FC' : '#1F2328', 'text-valign': 'bottom', 'text-halign': 'center', 'text-outline-width': 2, 'text-outline-color': isDark ? '#0D1117' : '#FFFFFF', 'text-outline-opacity': 1, 'text-margin-y': 6, 'text-wrap': 'wrap', 'text-max-width': '60px' } },
+        { selector: 'node:selected', style: { 'border-width': 4, 'border-color': 'var(--theme-primary)', 'border-opacity': 1, 'width': '44px', 'height': '44px', 'background-opacity': 0.9 } },
+        { selector: 'edge', style: { 'width': 2, 'line-color': 'var(--edge-call)', 'target-arrow-color': 'var(--edge-call)', 'target-arrow-shape': 'triangle', 'source-arrow-shape': 'none', 'arrow-scale': 1.2, 'curve-style': 'bezier', 'label': 'data(type)', 'font-size': '9px', 'font-family': "'Inter', sans-serif", 'color': isDark ? '#8B949E' : '#656D76', 'text-outline-width': 1, 'text-outline-color': isDark ? '#0D1117' : '#FFFFFF', 'text-margin-y': -6, 'control-point-distance': 20, 'control-point-weight': 0.5 } },
+        { selector: 'edge[type="imports"]', style: { 'line-style': 'dashed', 'line-color': 'var(--edge-import)', 'target-arrow-color': 'var(--edge-import)', 'width': 1.5 } }
       ],
       layout: { name: 'cose', idealEdgeLength: 100, nodeRepulsion: 8000, nestingFactor: 1.2, gravity: 0.3, numIter: 1000, refresh: 20, fit: true, padding: 40 },
       userZoomingEnabled: true,
@@ -1987,9 +2513,6 @@ console.log('main.js loaded');
     buildFileTree();
     showEmptyDetails();
     updateRepoSourceInfo();
-    if (typeof window.applyWorkspaceFilters === 'function') {
-      window.applyWorkspaceFilters();
-    }
     console.log('✅ Graph loaded with', graph.nodes.length, 'nodes and', graph.edges.length, 'edges.');
   }
 
@@ -2000,12 +2523,57 @@ console.log('main.js loaded');
     modal.addEventListener('click', (e) => {
       if (e.target === modal) closeRequirementsWorkspace();
     });
+
+    const showMdBtn = document.getElementById('showMdBtn');
+    const showJsonBtn = document.getElementById('showJsonBtn');
+
+    function updateViewMode(mode) {
+      requirementsViewMode = mode;
+      const output = document.getElementById('reqOutput');
+      if (mode === 'markdown') {
+        showMdBtn.style.background = 'var(--theme-primary)';
+        showMdBtn.style.color = 'white';
+        showMdBtn.style.borderColor = 'var(--theme-primary)';
+
+        showJsonBtn.style.background = '';
+        showJsonBtn.style.color = '';
+        showJsonBtn.style.borderColor = '';
+
+        if (requirementsRawMarkdown) {
+          output.textContent = requirementsRawMarkdown;
+        } else {
+          output.innerHTML = '<span style="color:var(--theme-text-dim);">Requirements document will appear here after generation.</span>';
+        }
+      } else {
+        showJsonBtn.style.background = 'var(--theme-primary)';
+        showJsonBtn.style.color = 'white';
+        showJsonBtn.style.borderColor = 'var(--theme-primary)';
+
+        showMdBtn.style.background = '';
+        showMdBtn.style.color = '';
+        showMdBtn.style.borderColor = '';
+
+        if (requirementsJsonTasks) {
+          output.textContent = JSON.stringify(requirementsJsonTasks, null, 2);
+        } else {
+          output.innerHTML = '<span style="color:var(--theme-text-dim);">No JSON data generated yet.</span>';
+        }
+      }
+    }
+
+    if (showMdBtn && showJsonBtn) {
+      showMdBtn.addEventListener('click', () => updateViewMode('markdown'));
+      showJsonBtn.addEventListener('click', () => updateViewMode('json'));
+    }
+
     document.getElementById('generateReqBtn').addEventListener('click', generateRequirements);
     document.getElementById('clearScopeBtn').addEventListener('click', () => {
       if (cy) cy.elements().unselect();
       selectedNodeIds = [];
       updateWorkspaceScope();
-      document.getElementById('reqOutput').textContent = 'Requirements document will appear here after generation.';
+      requirementsRawMarkdown = '';
+      requirementsJsonTasks = null;
+      updateViewMode(requirementsViewMode);
       document.getElementById('matrixBody').innerHTML = `<tr><td colspan="3" style="text-align:center; padding:var(--space-lg); color:var(--theme-text-dim);">No requirements generated yet.</td></tr>`;
       window._generatedReqDoc = null;
     });
@@ -2250,42 +2818,6 @@ console.log('main.js loaded');
       }
     });
 
-    const graphTimeSlider = document.getElementById('graphTimeSlider');
-    if (graphTimeSlider) {
-      graphTimeSlider.addEventListener('input', (e) => {
-        const idx = parseInt(e.target.value, 10);
-        const selected = currentTimelineCommits[idx];
-        if (selected) {
-          console.log(`Selected commit SHA (from slider): ${selected.sha}`);
-          service.currentCommitSHA = selected.sha;
-
-          const commitTimelineRail = document.getElementById('commitTimelineRail');
-          if (commitTimelineRail) {
-            commitTimelineRail.querySelectorAll('.commit-card').forEach(cc => {
-              if (cc.dataset.sha === selected.sha) {
-                cc.style.borderColor = 'var(--theme-primary)';
-                cc.style.background = 'var(--theme-surface)';
-                cc.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-              } else {
-                cc.style.borderColor = 'var(--theme-border)';
-                cc.style.background = 'var(--theme-surface-elevated)';
-              }
-            });
-          }
-
-          const dateEl = document.getElementById('sliderCommitDate');
-          const shaEl = document.getElementById('sliderCommitSha');
-          if (dateEl) dateEl.textContent = selected.date ? new Date(selected.date).toLocaleString() : 'No date';
-          if (shaEl) shaEl.textContent = selected.sha ? selected.sha.substring(0, 7) : '—';
-
-          updateRuleEvolutionHighlights();
-
-          loadGraph();
-          loadVersionedFileTree(selected.sha);
-        }
-      });
-    }
-
     // Wire up offline banner action buttons
     const offlineRetryBtn = document.getElementById('offlineRetryBtn');
     if (offlineRetryBtn) {
@@ -2370,28 +2902,46 @@ console.log('main.js loaded');
       const originalText = browseBtn.textContent;
       browseBtn.textContent = 'Analyzing...';
 
+      // Instantly clear demo project context on click
+      currentRepoTree = null;
+      currentRepoSource = absolutePath;
+      currentRepoGitUrl = '';
+      originalRepoSource = absolutePath;
+      service.demoMode = false;
+      service.graphData = null; // Clear old local graph
+      hasLoadedRepo = true;
+      updateRepoSourceInfo();
+      buildFileTree();
+      loadGraph();
+
       try {
+        const timeoutVal = parseInt(localStorage.getItem('code-intel-ingestion-timeout') || '300', 10);
+
+        activeIngestingBranch = 'main';
+        activeIngestingVersion = '';
+
         const resp = await service.safeFetch(`${service.baseUrl}/analyze`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ repo_path: absolutePath })
+          body: JSON.stringify({ repo_path: absolutePath, timeout: timeoutVal })
         });
 
         const data = await resp.json();
         console.log('Absolute path analysis triggered successfully:', data);
         alert(`Analysis triggered successfully!\nSelected path: ${absolutePath}`);
 
-        currentRepoTree = null;
-        currentRepoSource = absolutePath;
-        service.demoMode = false;
-        service.graphData = null; // Clear old local graph
+        const resolvedRepoPath = data.repo_path || data.path || data.local_path || absolutePath;
+        currentRepoSource = resolvedRepoPath;
         updateRepoSourceInfo();
 
         if (data.job_id) {
           subscribeToIngestionStream(data.job_id);
         } else {
+          const resolvedBranch = 'main';
+          const resolvedVersion = data.version || data.commit_sha || data.sha || 'latest';
+          saveSessionAndHistory(resolvedRepoPath, resolvedBranch, resolvedVersion);
           loadGraph();
-          loadBranchesAndCommits();
+          loadBranchesAndCommits(resolvedBranch);
         }
       } catch (e) {
         console.error('Failed to analyze absolute path:', e);
@@ -2404,6 +2954,125 @@ console.log('main.js loaded');
     document.getElementById('demoProjectBtn').addEventListener('click', () => {
       selectDemoProject();
     });
+    const reanalyzeBtn = document.getElementById('reanalyzeRepoBtn');
+    if (reanalyzeBtn) {
+      reanalyzeBtn.addEventListener('click', async () => {
+        const repoPath = currentRepoGitUrl || originalRepoSource || currentRepoSource;
+        if (!repoPath || repoPath === 'Demo project') {
+          alert('No active repository loaded to reanalyze.');
+          return;
+        }
+
+        const confirmReanalyze = confirm(`Are you sure you want to re-analyze the repository at:\n${repoPath}?`);
+        if (!confirmReanalyze) return;
+
+        reanalyzeBtn.disabled = true;
+        reanalyzeBtn.textContent = 'Reanalyzing...';
+
+        try {
+          const timeoutVal = parseInt(localStorage.getItem('code-intel-ingestion-timeout') || '300', 10);
+          const payload = {
+            repo_path: repoPath,
+            timeout: timeoutVal
+          };
+          if (service.currentCommitSHA && service.currentCommitSHA !== 'latest') {
+            payload.version = service.currentCommitSHA;
+          }
+
+          const resp = await service.safeFetch(`${service.baseUrl}/analyze`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          const data = await resp.json();
+          console.log('Re-analysis triggered successfully:', data);
+          alert(`Re-analysis triggered successfully!\nJob ID: ${data.job_id || 'started'}`);
+
+          if (data.job_id) {
+            subscribeToIngestionStream(data.job_id);
+          } else {
+            const resolvedBranch = (document.getElementById('branchSelector') ? document.getElementById('branchSelector').value : 'main') || 'main';
+            const resolvedVersion = data.version || data.commit_sha || data.sha || service.currentCommitSHA || 'latest';
+            saveSessionAndHistory(repoPath, resolvedBranch, resolvedVersion);
+            loadGraph();
+            loadBranchesAndCommits(resolvedBranch);
+          }
+        } catch (e) {
+          console.error('Re-analysis failed:', e);
+          alert('Failed to reanalyze. Error: ' + e.message);
+        } finally {
+          reanalyzeBtn.disabled = false;
+          reanalyzeBtn.textContent = 'Reanalyze';
+        }
+      });
+    }
+
+    const dashAnalyzeBtn = document.getElementById('dashboardAnalyzeBtn');
+    if (dashAnalyzeBtn) {
+      dashAnalyzeBtn.addEventListener('click', async () => {
+        const repoInput = document.getElementById('dashboardRepoInput');
+        const branchInput = document.getElementById('dashboardBranchInput');
+        const url = repoInput ? repoInput.value.trim() : '';
+        const branch = branchInput ? branchInput.value.trim() : '';
+
+        if (!url) {
+          alert('Please enter a remote Git URL or absolute local path.');
+          return;
+        }
+
+        dashAnalyzeBtn.disabled = true;
+        dashAnalyzeBtn.textContent = 'Ingesting...';
+
+        service.demoMode = false;
+        service.graphData = null;
+
+        try {
+          const timeoutVal = parseInt(localStorage.getItem('code-intel-ingestion-timeout') || '300', 10);
+          const payload = { repo_path: url, timeout: timeoutVal };
+          if (branch) {
+            payload.branch = branch;
+          }
+
+          activeIngestingBranch = branch || 'main';
+          activeIngestingVersion = '';
+
+          const resp = await service.safeFetch(`${service.baseUrl}/analyze`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          const data = await resp.json();
+          console.log('Dashboard Ingestion triggered successfully:', data);
+          alert(`Ingestion triggered successfully! Job ID: ${data.job_id || 'started'}`);
+
+          const resolvedRepoPath = data.repo_path || data.path || data.local_path || url;
+          currentRepoSource = resolvedRepoPath;
+          currentRepoGitUrl = url.startsWith('http') || url.startsWith('git@') ? url : '';
+          originalRepoSource = url;
+          hasLoadedRepo = true;
+          updateRepoSourceInfo();
+
+          if (data.job_id) {
+            subscribeToIngestionStream(data.job_id);
+          } else {
+            const resolvedBranch = branch || 'main';
+            const resolvedVersion = data.version || data.commit_sha || data.sha || 'latest';
+            saveSessionAndHistory(resolvedRepoPath, resolvedBranch, resolvedVersion);
+            loadGraph();
+            loadBranchesAndCommits(resolvedBranch);
+          }
+        } catch (e) {
+          console.error('Dashboard Ingestion failed:', e);
+          alert('Failed to trigger ingestion. Error: ' + e.message);
+        } finally {
+          dashAnalyzeBtn.disabled = false;
+          dashAnalyzeBtn.textContent = 'Analyze & Load';
+        }
+      });
+    }
+
     document.getElementById('cloneRemoteBtn').addEventListener('click', async () => {
       const urlInput = document.getElementById('remoteRepoUrlInput');
       const branchInput = document.getElementById('remoteRepoBranchInput');
@@ -2428,11 +3097,27 @@ console.log('main.js loaded');
       cloneBtn.disabled = true;
       cloneBtn.textContent = 'Ingesting...';
 
+      // Instantly clear demo project context on click
+      currentRepoTree = null;
+      currentRepoSource = url;
+      currentRepoGitUrl = url;
+      originalRepoSource = url;
+      service.demoMode = false;
+      service.graphData = null; // Clear old local graph
+      hasLoadedRepo = true;
+      updateRepoSourceInfo();
+      buildFileTree();
+      loadGraph();
+
       try {
-        const payload = { repo_path: url };
+        const timeoutVal = parseInt(localStorage.getItem('code-intel-ingestion-timeout') || '300', 10);
+        const payload = { repo_path: url, timeout: timeoutVal };
         if (branch) {
           payload.branch = branch;
         }
+
+        activeIngestingBranch = branch || 'main';
+        activeIngestingVersion = '';
 
         const resp = await service.safeFetch(`${service.baseUrl}/analyze`, {
           method: 'POST',
@@ -2444,17 +3129,18 @@ console.log('main.js loaded');
         console.log('Ingestion triggered successfully:', data);
         alert(`Ingestion triggered successfully! Job ID: ${data.job_id || 'started'}`);
 
-        currentRepoTree = null;
-        currentRepoSource = url;
-        service.demoMode = false;
-        service.graphData = null; // Clear old local graph
+        const resolvedRepoPath = data.repo_path || data.path || data.local_path || url;
+        currentRepoSource = resolvedRepoPath;
         updateRepoSourceInfo();
 
         if (data.job_id) {
           subscribeToIngestionStream(data.job_id);
         } else {
+          const resolvedBranch = branch || 'main';
+          const resolvedVersion = data.version || data.commit_sha || data.sha || 'latest';
+          saveSessionAndHistory(resolvedRepoPath, resolvedBranch, resolvedVersion);
           loadGraph();
-          loadBranchesAndCommits();
+          loadBranchesAndCommits(resolvedBranch);
         }
       } catch (e) {
         console.error('Remote ingestion failed:', e);
@@ -2476,41 +3162,50 @@ console.log('main.js loaded');
       branchSelector.addEventListener('change', () => {
         const val = branchSelector.value;
         console.log(`Branch changed to: ${val}`);
+        loadBranchesAndCommits(val);
       });
     }
 
-    loadGraph();
+    restoreSessionState();
     refreshMCPTools(); // Also refresh MCP tools on load
     enableSplitter();
     enableRightSplitter();
     updateRepoSourceInfo();
+    renderDashboardAndSidebar();
 
-    // Periodic health check of FastAPI backend (every 10 seconds)
+    // Periodic health check of FastAPI backend (only if offline, to automatically recover)
+    // When connected, we do not poll; safeFetch dynamically detects if the server goes offline.
+    let lastHealthCheckTime = Date.now();
     setInterval(async () => {
-      try {
-        const resp = await fetch(`${service.baseUrl}/api/status`, { signal: getTimeoutSignal(3000) });
-        if (resp.ok) {
-          const data = await resp.json();
-          // If recovered, dismiss the banner and update the status bar
-          triggerOfflineMode(false);
+      if (service.connected) {
+        return;
+      }
 
-          // Keep dockerMode in sync
-          if (data && (data.is_docker === true || data.docker === true || data.dockerMode === true || data.docker_mode === true || data.environment === 'docker')) {
-            localStorage.setItem('dockerMode', 'true');
-          } else {
-            localStorage.setItem('dockerMode', 'false');
-          }
+      // Skip status polling if there's an active SSE ingestion stream
+      if (activeEventSource) {
+        return;
+      }
+
+      const now = Date.now();
+      const interval = 10000; // Poll every 10 seconds only when offline
+      if (now - lastHealthCheckTime < interval) {
+        return;
+      }
+
+      lastHealthCheckTime = now;
+      try {
+        await service.connect();
+        if (service.connected) {
+          triggerOfflineMode(false);
         } else {
-          if (resp.status === 502 || resp.status === 503) {
-            triggerOfflineMode(true);
-          }
+          triggerOfflineMode(true);
         }
       } catch (e) {
-        // Remain or transition to offline
+        // Remain offline
         console.warn('Backend health check error:', e.message || e);
         triggerOfflineMode(true);
       }
-    }, 10000);
+    }, 5000);
 
     // Periodic health check (every 30 seconds)
     setInterval(() => {

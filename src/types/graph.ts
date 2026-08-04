@@ -2,6 +2,7 @@ export interface GraphNode {
   id: string;
   label: string;
   type: string;
+  file?: string;
 }
 
 export interface GraphEdge {

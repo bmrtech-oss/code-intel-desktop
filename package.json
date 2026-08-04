@@ -6,16 +6,6 @@
     "build": "tauri build"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.0.0",
-    "@types/cytoscape": "^3.21.9",
-    "@types/node": "^26.1.2",
-    "@types/react": "^19.2.18",
-    "cytoscape": "^3.34.0",
-    "typescript": "^7.0.2"
-  },
-  "dependencies": {
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "zustand": "^5.0.14"
+    "@tauri-apps/cli": "^2.0.0"
   }
 }

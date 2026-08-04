@@ -45,11 +45,12 @@
   <div class="main-area">
     <!-- SIDEBAR (left pane) -->
     <aside class="sidebar left-pane">
-      <section class="sidebar-section resizable-section" style="height: 260px;">
+      <section class="sidebar-section">
         <div class="sidebar-section__title">File Tree</div>
         <div class="sidebar-section__actions">
           <button class="sidebar__action-button" id="browseRepoBtn">Browse repo</button>
           <button class="sidebar__action-button" id="demoProjectBtn">Show demo project</button>
+          <button class="sidebar__action-button" id="reanalyzeRepoBtn" style="display: none;">Reanalyze</button>
         </div>
         <!-- Remote Git Ingestion Inputs -->
         <div class="remote-git-section" style="margin-bottom: var(--space-sm); display: flex; flex-direction: column; gap: var(--space-xs);">
@@ -70,21 +71,33 @@
           </div>
         </div>
         <div class="file-tree" id="fileTree"></div>
+
+        <!-- 📋 Analyzed Repositories list -->
+        <div class="analyzed-repos-sidebar" style="margin-top: var(--space-sm); display: flex; flex-direction: column; gap: var(--space-xs);">
+          <div style="font-size: 11px; font-weight: 600; color: var(--theme-text-secondary); display: flex; align-items: center; justify-content: space-between;">
+            <span>📋 Analyzed Repositories</span>
+            <span id="sidebarClearHistoryBtn" style="font-size: 10px; color: var(--theme-danger); cursor: pointer; text-decoration: underline; font-weight: 500;">Clear</span>
+          </div>
+          <div id="sidebarAnalyzedReposList" style="display: flex; flex-direction: column; gap: 4px; max-height: 100px; overflow-y: auto; padding: 4px; border: 1px solid var(--theme-border); border-radius: var(--radius-sm); background: var(--theme-surface-elevated);">
+            <div style="font-size: 10px; color: var(--theme-text-dim); text-align: center; padding: 4px;">No analyzed repos</div>
+          </div>
+        </div>
+
         <div class="sidebar__source-info" id="repoSourceInfo">Source: Demo project</div>
         <input type="file" id="repoFileInput" webkitdirectory directory multiple style="display:none" />
       </section>
 
       <!-- Repository Timeline & Commits Section -->
-      <section class="sidebar-section resizable-section" id="repositorySection" style="height: 240px; display: flex; flex-direction: column;">
+      <section class="sidebar-section" id="repositorySection">
         <div class="sidebar-section__title">Repository Timeline</div>
-        <div style="display: flex; flex-direction: column; gap: var(--space-xs); margin-bottom: var(--space-sm); flex-shrink: 0;">
+        <div style="display: flex; flex-direction: column; gap: var(--space-xs); margin-bottom: var(--space-sm);">
           <label for="branchSelector" style="font-size: 11px; font-weight: 600; color: var(--theme-text-secondary);">Select Branch</label>
           <select id="branchSelector" class="sidebar__input" style="font-size: 11px; padding: 4px var(--space-sm); border: 1px solid var(--theme-border); border-radius: var(--radius-sm); background: var(--theme-surface-elevated); color: var(--theme-text-primary); outline: none; width: 100%;">
             <option value="main">main</option>
           </select>
         </div>
-        <div style="font-size: 11px; font-weight: 600; color: var(--theme-text-secondary); margin-bottom: var(--space-xs); flex-shrink: 0;">Commit History</div>
-        <div id="commitTimelineRail" style="display: flex; flex-direction: column; gap: var(--space-xs); flex: 1; min-height: 80px; overflow-y: auto; padding: 4px; border: 1px solid var(--theme-border); border-radius: var(--radius-md); background: var(--theme-surface);">
+        <div style="font-size: 11px; font-weight: 600; color: var(--theme-text-secondary); margin-bottom: var(--space-xs);">Commit History</div>
+        <div id="commitTimelineRail" style="display: flex; flex-direction: column; gap: var(--space-xs); max-height: 150px; overflow-y: auto; padding: 4px; border: 1px solid var(--theme-border); border-radius: var(--radius-md); background: var(--theme-surface);">
           <div style="padding: var(--space-sm); text-align: center; color: var(--theme-text-dim); font-size: 11px;">No commits loaded</div>
         </div>
       </section>
@@ -117,14 +130,6 @@
             <span class="filter-chip__dot" style="background:var(--node-enum);"></span>
             Enum
           </button>
-        </div>
-        <div style="display: flex; flex-direction: column; gap: var(--space-xs); margin-top: var(--space-md); padding-top: var(--space-md); border-top: 1px solid var(--theme-border);">
-          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; font-weight: 600; color: var(--theme-text-secondary);">
-            <span>High-Impact Filter (Min Dependents)</span>
-            <span id="riskFilterValue" style="color: var(--theme-primary); font-family: var(--font-mono);">0</span>
-          </div>
-          <input type="range" id="riskFilterSlider" min="0" max="10" value="0" style="width: 100%; cursor: pointer;" />
-          <div style="font-size: 10px; color: var(--theme-text-dim); line-height: 1.3;">Hides nodes with fewer incoming connections/dependencies to isolate core modules.</div>
         </div>
       </section>
       <section class="sidebar-section">
@@ -186,13 +191,47 @@
           <div class="graph-viewer__splash-text">Select a folder or symbol to begin exploring.</div>
         </div>
 
-        <!-- Draggable Time Slider Component -->
-        <div class="time-slider-container" id="timeSliderContainer" style="display: none; position: absolute; bottom: 12px; left: 45%; transform: translateX(-50%); width: 70%; background: var(--theme-surface-elevated); border: 1px solid var(--theme-border); border-radius: var(--radius-xl); padding: var(--space-md); box-shadow: var(--shadow-lg); z-index: 10; flex-direction: column; gap: var(--space-xs);">
-          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--theme-text-secondary); width: 100%;">
-            <div>📅 <strong id="sliderCommitDate">No commit selected</strong></div>
-            <div>SHA: <code id="sliderCommitSha" style="font-family: var(--font-mono); font-weight: 600; color: var(--theme-primary);">—</code></div>
+        <!-- WORKSPACE DASHBOARD VIEW -->
+        <div id="workspaceDashboard" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: var(--theme-bg); z-index: 10; padding: var(--space-xl); display: flex; flex-direction: column; gap: var(--space-lg); overflow-y: auto; box-sizing: border-box;">
+
+          <div style="display: flex; align-items: center; gap: var(--space-sm); border-bottom: 1px solid var(--theme-border); padding-bottom: var(--space-md); margin-bottom: var(--space-xs);">
+            <span style="font-size: 32px;">🌐</span>
+            <div>
+              <h1 style="margin: 0; font-size: 20px; color: var(--theme-text-primary);">Code-Intel Workspace Dashboard</h1>
+              <p style="margin: 2px 0 0 0; font-size: 12px; color: var(--theme-text-dim);">Durable session persistence & recent repositories manager</p>
+            </div>
           </div>
-          <input type="range" id="graphTimeSlider" style="width: 100%; cursor: pointer; margin: 4px 0;" />
+
+          <!-- New Analysis Section -->
+          <div style="background: var(--theme-surface); border: 1px solid var(--theme-border); border-radius: var(--radius-md); padding: var(--space-md); display: flex; flex-direction: column; gap: var(--space-sm);">
+            <h2 style="margin: 0; font-size: 14px; font-weight: 600; color: var(--theme-text-primary); display: flex; align-items: center; gap: 6px;">🚀 New Analysis Ingestion</h2>
+            <div style="display: flex; flex-direction: column; gap: var(--space-xs);">
+              <label style="font-size: 11px; font-weight: 600; color: var(--theme-text-secondary);">Repository Path / Git URL</label>
+              <input type="text" id="dashboardRepoInput" placeholder="Enter remote HTTPS/SSH URL or local directory absolute path" style="font-size: 12px; padding: 8px var(--space-sm); border: 1px solid var(--theme-border); border-radius: var(--radius-sm); background: var(--theme-surface-elevated); color: var(--theme-text-primary); outline: none; width: 100%; box-sizing: border-box;" />
+            </div>
+            <div style="display: flex; gap: var(--space-md);">
+              <div style="flex: 1; display: flex; flex-direction: column; gap: var(--space-xs);">
+                <label style="font-size: 11px; font-weight: 600; color: var(--theme-text-secondary);">Branch (optional)</label>
+                <input type="text" id="dashboardBranchInput" placeholder="main" style="font-size: 12px; padding: 8px var(--space-sm); border: 1px solid var(--theme-border); border-radius: var(--radius-sm); background: var(--theme-surface-elevated); color: var(--theme-text-primary); outline: none; width: 100%; box-sizing: border-box;" />
+              </div>
+              <div style="display: flex; align-items: flex-end;">
+                <button class="sidebar__action-button" id="dashboardAnalyzeBtn" style="padding: 0 var(--space-md); font-weight: 600; font-size: 12px; height: 32px; border: 1px solid var(--theme-border); border-radius: var(--radius-sm); background: var(--theme-primary); color: white; cursor: pointer;">Analyze & Load</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Recent Repositories Section -->
+          <div style="display: flex; flex-direction: column; gap: var(--space-sm);">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <h2 style="margin: 0; font-size: 14px; font-weight: 600; color: var(--theme-text-primary); display: flex; align-items: center; gap: 6px;">📂 Recent Repositories & Historical Runs</h2>
+              <button class="sidebar__action-button" id="dashboardClearHistoryBtn" style="font-size: 10px; padding: 2px 8px; background: var(--theme-danger); border-color: var(--theme-danger); color: white; cursor: pointer; font-weight: 600;">🗑️ Clear Run History</button>
+            </div>
+            <div id="dashboardRecentRunsList" style="display: flex; flex-direction: column; gap: var(--space-md);">
+              <!-- Dynamically populated runs list -->
+              <div style="padding: var(--space-lg); text-align: center; color: var(--theme-text-dim); background: var(--theme-surface); border: 1px dashed var(--theme-border); border-radius: var(--radius-md); font-size: 12px;">No historical runs found. Analyze a new repository above to begin!</div>
+            </div>
+          </div>
+
         </div>
 
         <div class="graph-controls">
@@ -220,19 +259,13 @@
           <div class="details-panel__empty-text">Click a node in the graph to view details</div>
         </div>
         <div id="detailsContent" style="display:none;">
-          <div class="details-panel__section resizable-section" style="height: 120px; padding-bottom: 8px;">
+          <div class="details-panel__section">
             <div class="details-panel__section-title">Impact Analysis</div>
             <div id="impactList"><div class="details-panel__impact-item"><span class="mono">—</span></div></div>
           </div>
-          <div class="details-panel__section resizable-section" style="height: 100px; padding-bottom: 8px;">
+          <div class="details-panel__section">
             <div class="details-panel__section-title">Call Paths</div>
             <div id="callPaths" style="font-size:12px; color:var(--theme-text-secondary);"><span class="mono">No paths available</span></div>
-          </div>
-          <div class="details-panel__section resizable-section" style="height: 220px; padding-bottom: 8px;">
-            <div class="details-panel__section-title">📋 Rule Evolution</div>
-            <div id="ruleEvolutionTimeline" style="display:flex; flex-direction:column; gap:var(--space-xs); font-size:12px; color:var(--theme-text-secondary);">
-              <div style="color:var(--theme-text-dim); text-align:center;">No history found for this node.</div>
-            </div>
           </div>
           <div class="details-panel__section">
             <div class="details-panel__section-title">Actions</div>
@@ -318,6 +351,11 @@
           <input type="password" id="settingsApiKey" placeholder="Enter your API key" />
           <div class="modal__status" id="settingsKeyStatus">Key not saved</div>
         </div>
+        <div class="modal__field">
+          <label for="settingsTimeout">Ingestion Timeout (seconds)</label>
+          <input type="number" id="settingsTimeout" placeholder="e.g. 300" min="10" value="300" />
+          <div class="modal__help">Maximum time allowed for background cloning & parsing tasks (defaults to 300 seconds / 5 minutes).</div>
+        </div>
 
         <!-- Connection Test Block -->
         <div class="modal__field" style="border-top: 1px solid var(--theme-border); padding-top: var(--space-md); margin-top: var(--space-xs);">
@@ -326,6 +364,15 @@
             <button class="modal__button" id="settingsTestBtn" style="padding: 2px 8px; font-size: 11px;">🔌 Test Connection</button>
           </div>
           <div id="settingsTestStatus" class="modal__status" style="padding: var(--space-sm); border-radius: var(--radius-sm); border: 1px dashed var(--theme-border); background: var(--theme-surface); font-family: var(--font-mono); font-size: 11px; white-space: pre-wrap; line-height: 1.4;">Ready to test. Click "Test Connection" to run diagnostics.</div>
+        </div>
+
+        <!-- LLM Connection Test Block -->
+        <div class="modal__field" style="border-top: 1px solid var(--theme-border); padding-top: var(--space-md); margin-top: var(--space-xs);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-xs);">
+            <label style="margin-bottom: 0;">LLM Connection Diagnostics</label>
+            <button class="modal__button" id="settingsTestLlmBtn" style="padding: 2px 8px; font-size: 11px;">🔌 Test LLM Connection</button>
+          </div>
+          <div id="settingsLlmTestStatus" class="modal__status" style="padding: var(--space-sm); border-radius: var(--radius-sm); border: 1px dashed var(--theme-border); background: var(--theme-surface); font-family: var(--font-mono); font-size: 11px; white-space: pre-wrap; line-height: 1.4;">Ready to test. Click "Test LLM Connection" to sync credentials & run pre-flight tests.</div>
         </div>
 
         <div class="modal__actions">
@@ -363,9 +410,11 @@
           <div class="workspace-panel workspace-panel--right">
             <div class="workspace-panel__label">
               <span>Generated Requirements</span>
-              <div class="workspace-actions">
+              <div class="workspace-actions" style="display: flex; gap: var(--space-xs); align-items: center;">
+                <button class="modal__button" id="showMdBtn" style="padding: 2px 6px; font-size: 11px; background: var(--theme-primary); color: white; border-color: var(--theme-primary);">📄 Show MD</button>
+                <button class="modal__button" id="showJsonBtn" style="padding: 2px 6px; font-size: 11px;">⚙️ Show JSON</button>
                 <button class="modal__button" id="copyReqBtn">📋 Copy</button>
-                <button class="modal__button" id="downloadReqBtn">⬇️ Download</button>
+                <button class="modal__button" id="downloadReqBtn">⬇️ Download MD</button>
               </div>
             </div>
             <div class="workspace-panel__content workspace-panel__content--code" id="reqOutput">
